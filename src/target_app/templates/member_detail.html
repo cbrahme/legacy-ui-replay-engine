@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Account Summary - Member #{{ member.id }} - First Federal CU{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Account Summary &mdash; Member #{{ member.id }}</h2>
+    <div>
+        <a href="/members" class="btn btn-secondary" style="text-decoration: none;">&larr; Back to Member Query</a>
+    </div>
+</div>
+
+{% if member.is_locked %}
+    <div class="alert alert-danger" id="account-locked-alert" role="alert">
+        <strong>Security Lockout:</strong> Account is locked due to suspected security flag. Supervisor clearance required before proceeding.
+    </div>
+    
+    <div style="background-color: #fff8f8; border: 1px solid #f5c6cb; padding: 14px; margin-bottom: 20px;">
+        <h4 style="margin: 0 0 8px 0; color: #721c24;">Human Intervention / Supervisor Clearance</h4>
+        <p style="margin: 0 0 12px 0; font-size: 12px; color: #495057;">
+            An operator or supervisor must manually verify caller identity before unlocking account capabilities.
+        </p>
+        <form action="/members/{{ member.id }}/override" method="POST">
+            <button type="submit" id="supervisor-override-btn" class="btn btn-danger">Authorize Supervisor Override</button>
+        </form>
+    </div>
+{% endif %}
+
+<table class="legacy-table" style="margin-bottom: 20px;">
+    <tbody>
+        <tr>
+            <th style="width: 20%;">Member Name:</th>
+            <td style="width: 30%;" id="member-name-val">{{ member.name }}</td>
+            <th style="width: 20%;">Member ID:</th>
+            <td style="width: 30%;" id="member-id-val">{{ member.id }}</td>
+        </tr>
+        <tr>
+            <th>Tax ID / SSN:</th>
+            <td>{{ member.ssn_masked }}</td>
+            <th>Membership Date:</th>
+            <td>{{ member.join_date }}</td>
+        </tr>
+        <tr>
+            <th>Account Status:</th>
+            <td colspan="3">
+                {% if member.is_locked %}
+                    <span class="badge badge-locked" id="status-badge">Locked / Hold</span>
+                {% else %}
+                    <span class="badge badge-active" id="status-badge">Active & Verified</span>
+                {% endif %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<h3 style="font-size: 14px; color: #0b2545; border-bottom: 2px solid #134074; padding-bottom: 4px; margin-top: 20px;">
+    Core Deposit & Share Accounts
+</h3>
+
+<table class="legacy-table" id="accounts-table">
+    <thead>
+        <tr>
+            <th style="width: 20%;">Account Type</th>
+            <th style="width: 20%;">Account Number</th>
+            <th style="width: 25%;">Available Balance</th>
+            <th style="width: 20%;">Current Ledger Balance</th>
+            <th style="width: 15%;">Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for acc in member.accounts %}
+        <tr class="account-row-{{ acc.type_code | lower }}">
+            <td><strong>{{ acc.name }}</strong></td>
+            <td>{{ acc.number }}</td>
+            <td class="balance" id="{{ acc.type_code | lower }}-balance-val" style="font-weight: bold; color: #0b2545;">
+                {{ acc.balance }}
+            </td>
+            <td>{{ acc.ledger_balance }}</td>
+            <td>
+                <span class="badge badge-active">{{ acc.status }}</span>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 20px; display: flex; gap: 10px;">
+    <a href="/transfers?from_member={{ member.id }}" id="btn-initiate-transfer" class="btn">Initiate Transfer / Sub-Account</a>
+    <a href="/members" class="btn btn-secondary">Done Servicing</a>
+</div>
+{% endblock %}

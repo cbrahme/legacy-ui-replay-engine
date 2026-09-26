@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Funds Transfer - First Federal CU Core Banking{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Funds Transfer & Sub-Account Servicing</h2>
+    <span style="font-size: 11px; color: #666;">Form ID: <strong>FRM-TRF-004</strong></span>
+</div>
+
+{% if success_message %}
+    <div class="alert alert-success" id="transfer-success-alert" role="alert">
+        <strong>Success:</strong> {{ success_message }}
+    </div>
+{% endif %}
+
+{% if requires_confirmation %}
+    <div class="alert alert-danger" id="confirmation-warning-banner" role="alert">
+        <strong>ATTENTION &mdash; IRREVERSIBLE ACTION:</strong> You are about to initiate an irreversible fund debit. This action cannot be undone automatically.
+    </div>
+
+    <div style="background-color: #fff9e6; border: 2px solid #e0a800; padding: 20px; margin-bottom: 20px;">
+        <h3 style="margin-top: 0; color: #856404;">Confirm Funds Transfer Details</h3>
+        <table class="legacy-table" style="max-width: 500px;">
+            <tr>
+                <th>Source Account:</th>
+                <td>{{ from_account }}</td>
+            </tr>
+            <tr>
+                <th>Destination Account:</th>
+                <td>{{ to_account }}</td>
+            </tr>
+            <tr>
+                <th>Transfer Amount:</th>
+                <td style="font-weight: bold; font-size: 14px; color: #b71c1c;">${{ amount }}</td>
+            </tr>
+        </table>
+        
+        <form action="/transfers/confirm" method="POST" style="margin-top: 15px;">
+            <input type="hidden" name="from_account" value="{{ from_account }}">
+            <input type="hidden" name="to_account" value="{{ to_account }}">
+            <input type="hidden" name="amount" value="{{ amount }}">
+            <button type="submit" id="confirm-transfer-btn" class="btn btn-danger">Confirm & Post Transaction</button>
+            <a href="/transfers" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+{% else %}
+    <form action="/transfers" method="POST" id="transfer-form" style="max-width: 600px;">
+        <div class="form-row">
+            <label for="from_account" class="field-label">From Account</label>
+            <select id="from_account" name="from_account" required>
+                <option value="SAV-8002">Share Savings (SAV-8002) - Available: $4,250.75</option>
+                <option value="CHK-4001">Standard Checking (CHK-4001) - Available: $1,120.50</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="to_account" class="field-label">To Account Number / Beneficiary</label>
+            <input type="text" id="to_account" name="to_account" placeholder="Enter target account (e.g. EXT-9871)" required>
+        </div>
+
+        <div class="form-row">
+            <label for="amount" class="field-label">Transfer Amount ($ USD)</label>
+            <input type="text" id="amount" name="amount" placeholder="0.00" required>
+        </div>
+
+        <div class="form-row" style="margin-top: 20px;">
+            <button type="submit" id="review-transfer-btn" class="btn">Proceed to Verification</button>
+            <a href="/members" class="btn btn-secondary">Return to Members</a>
+        </div>
+    </form>
+{% endif %}
+{% endblock %}

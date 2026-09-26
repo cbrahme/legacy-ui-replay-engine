@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - First Federal CU Core Banking{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Branch Operator Console &mdash; Daily Operations</h2>
+    <span style="font-size: 11px; color: #666;">Date: <span id="current-date">Today</span></span>
+</div>
+
+<p>Select a core module from the quick-access panel below or use the navigation bar above to begin customer servicing.</p>
+
+<table class="legacy-table">
+    <thead>
+        <tr>
+            <th style="width: 25%;">Module Name</th>
+            <th style="width: 45%;">Description</th>
+            <th style="width: 15%;">Access Level</th>
+            <th style="width: 15%;">Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Member Servicing</strong></td>
+            <td>Query member profiles, inspect checking/savings balances, retrieve ledger history.</td>
+            <td>Teller / Officer</td>
+            <td><a href="/members" class="btn" style="text-decoration: none; display: inline-block;">Open Member Query</a></td>
+        </tr>
+        <tr>
+            <td><strong>Funds Transfer</strong></td>
+            <td>Execute manual inter-account and wire transfers between verified accounts.</td>
+            <td>Supervisor Clearance</td>
+            <td><a href="/transfers" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Transfers</a></td>
+        </tr>
+        <tr>
+            <td><strong>Exception Review</strong></td>
+            <td>Manage fraud locks, compliance alerts, and manual overrides.</td>
+            <td>Branch Manager</td>
+            <td><a href="/admin" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Review Queue</a></td>
+        </tr>
+    </tbody>
+</table>
+
+<div style="margin-top: 25px;">
+    <h3 style="font-size: 14px; color: #0b2545; border-bottom: 1px solid #c2c9d1; padding-bottom: 4px;">Recent System Notices</h3>
+    <div class="alert alert-warning" style="margin-top: 10px;">
+        <strong>Notice:</strong> High-risk account lockouts (Flag 67890) require manual supervisor override before balance inspection.
+    </div>
+</div>
+{% endblock %}

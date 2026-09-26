@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Member Search & Servicing - First Federal CU{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Member Registry & Servicing Query</h2>
+    <span style="font-size: 11px; color: #666;">Form ID: <strong>FRM-MBR-001</strong></span>
+</div>
+
+{% if error_message %}
+    <div class="alert alert-warning" id="not-found-alert" role="alert">
+        <strong>Warning:</strong> {{ error_message }}
+    </div>
+{% endif %}
+
+<div style="background-color: #f7f9fb; border: 1px solid #d2d6dc; padding: 16px; margin-bottom: 20px;">
+    <form action="/members/search" method="POST" id="member-search-form">
+        <div class="form-row">
+            <label for="member_id" class="field-label">Member Search ID</label>
+            <input 
+                type="text" 
+                id="member_id" 
+                name="member_id" 
+                placeholder="Enter 5-digit Member ID (e.g., 12345)" 
+                value="{{ query_id or '' }}" 
+                aria-label="Member Search ID"
+                required
+            >
+        </div>
+        <div class="form-row" style="margin-top: 10px;">
+            <button type="submit" id="search-button" class="btn">Search Records</button>
+            <a href="/members" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Clear Form</a>
+        </div>
+    </form>
+</div>
+
+<div style="margin-top: 20px; border-top: 1px solid #d2d6dc; padding-top: 15px;">
+    <h3 style="font-size: 13px; color: #0b2545; margin-bottom: 6px;">Query Policy & Operating Guidelines</h3>
+    <ul style="color: #555; font-size: 12px; line-height: 1.6; margin: 0; padding-left: 20px;">
+        <li>Enter the member's 5-digit institution ID to retrieve active share accounts and ledger balances.</li>
+        <li>System automatically logs all profile lookups under operator ID <code>teller_04</code> for regulatory compliance.</li>
+        <li>Accounts flagged for security hold or fraud lock will require branch manager override before servicing can proceed.</li>
+        <li>If a record does not exist, verify the input ID against physical identification before escalating to Registry Operations.</li>
+    </ul>
+</div>
+{% endblock %}

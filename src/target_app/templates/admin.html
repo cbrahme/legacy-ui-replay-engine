@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}System Admin - First Federal CU Core Banking{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>System Administration & Exception Review</h2>
+    <span style="font-size: 11px; color: #666;">Sec Level: <strong>AUDIT-ADMIN</strong></span>
+</div>
+
+<p>Audit queue for compliance holds, security incidents, and operational logs.</p>
+
+<table class="legacy-table">
+    <thead>
+        <tr>
+            <th>Alert ID</th>
+            <th>Member ID</th>
+            <th>Type</th>
+            <th>Timestamp</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>ALT-2041</td>
+            <td>67890</td>
+            <td>Suspicious Multi-Terminal Login</td>
+            <td>2026-09-19 14:22</td>
+            <td><span class="badge badge-locked">Pending Clearance</span></td>
+            <td><a href="/members/67890" class="btn btn-danger" style="font-size: 11px; padding: 4px 8px; text-decoration: none;">Review Hold</a></td>
+        </tr>
+        <tr>
+            <td>ALT-2039</td>
+            <td>12345</td>
+            <td>Routine Balance Inquiry</td>
+            <td>2026-09-19 11:05</td>
+            <td><span class="badge badge-active">Resolved</span></td>
+            <td><span style="color: #666; font-size: 11px;">Archived</span></td>
+        </tr>
+    </tbody>
+</table>
+{% endblock %}
