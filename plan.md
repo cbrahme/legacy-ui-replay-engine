@@ -317,159 +317,111 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 
 ## 5. Phased Implementation Roadmap
 
+### 📊 Project Progress Tracker
+
+| Phase | Description | Status | Evidence / Validation |
+| :--- | :--- | :---: | :--- |
+| **Phase 1** | Environment & Project Scaffolding | `[x] COMPLETED` | `uv`, Python 3.11, Playwright, `.env`, `.gitignore` configured |
+| **Phase 2** | Mock Banking Target Application | `[x] COMPLETED` | [`src/target_app/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/target_app/) (Jinja2 templates, members `12345`, `99999`, `67890`) |
+| **Phase 3** | Core Pydantic Contracts & Schema | `[x] COMPLETED` | [`src/models/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/) (`CapabilityArtifact`, `ExecutionResult`, `InterventionRecord`) |
+| **Phase 4** | Deterministic Replay Engine | `[x] COMPLETED` | [`src/engine/executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/engine/executor.py), 83% coverage, 24 unit/integration tests passing |
+| **Phase 5** | Safety Guardrails & PII Redaction | `[ ] PENDING` | `src/guardrails/policy.py`, `src/guardrails/redactor.py` |
+| **Phase 6** | Human Escalation & Action Recording | `[ ] PENDING` | `src/human/escalation.py`, live handoff & Playwright listener capture |
+| **Phase 7** | LLM Discovery Agent Loop & Compiler | `[ ] PENDING` | `src/agent/inspector.py`, `src/agent/discovery.py`, `src/agent/compiler.py` |
+| **Phase 8** | Typer CLI & Developer Workflow | `[ ] PENDING` | `src/cli.py` (`serve-target`, `discover`, `replay`, `test-harness`) |
+| **Phase 9** | End-to-End Evidence Generation | `[ ] PENDING` | Logs, screenshots, and DOM snapshots in `evidence/` |
+| **Phase 10** | Comprehensive Documentation | `[ ] PENDING` | `README.md` & `REPORT.md` (7 mandated sections) |
+
+---
+
 ### Phase 1: Environment & Project Scaffolding
-- Initialize project using `uv`.
-- Configure `pyproject.toml` with pinned dependencies:
-  - `playwright>=1.40.0`
-  - `pydantic>=2.5.0`
-  - `typer>=0.9.0`
-  - `fastapi>=0.104.0`
-  - `uvicorn>=0.24.0`
-  - `jinja2>=3.1.2`
-  - `anthropic>=0.18.0` / `openai>=1.12.0`
-  - `python-dotenv>=1.0.0`
-  - `pytest>=7.4.0`
-  - `rich>=13.7.0`
-- Install Playwright Chromium headless/headed binaries.
-- Set up directories: `capabilities/`, `evidence/`, `src/`, `tests/`.
-- Create `.env.example` and `.gitignore`.
+- [x] Initialize project using `uv`.
+- [x] Configure `pyproject.toml` with pinned dependencies (`playwright`, `pydantic`, `typer`, `fastapi`, `uvicorn`, `jinja2`, `openai`, `python-dotenv`, `pytest`, `pytest-cov`, `rich`).
+- [x] Install Playwright Chromium headless/headed binaries.
+- [x] Set up directories: `capabilities/`, `evidence/`, `src/`, `tests/`.
+- [x] Create `.env.example` and `.gitignore`.
 
 ### Phase 2: Mock Banking Target Application (`src/target_app/`)
-- Build FastAPI server in `src/target_app/app.py`.
-- Create Jinja2 HTML templates simulating legacy banking UI (`src/target_app/templates/`):
-  - `login.html`: Staff authentication.
-  - `dashboard.html`: Main navigation grid.
-  - `member_lookup.html`: Form search with tables and simulated delay.
-  - `member_detail.html`: Account balances and ledger.
-  - `transfer.html`: Multi-field form with confirmation modal.
-- Unit test mock routes to ensure reliable responses for IDs `12345`, `99999`, and `67890`.
+- [x] Build FastAPI server in `src/target_app/app.py`.
+- [x] Create Jinja2 HTML templates simulating legacy banking UI (`src/target_app/templates/`):
+  - [x] `dashboard.html`: Main navigation grid.
+  - [x] `member_search.html`: Form search with tables and simulated delay.
+  - [x] `member_detail.html`: Account balances and ledger.
+  - [x] `transfers.html`: Multi-field form with confirmation modal.
+  - [x] `admin.html`: System configuration and tenant overlays.
+- [x] Unit test mock routes to ensure reliable responses for IDs `12345`, `99999`, and `67890`.
 
 ### Phase 3: Core Pydantic Contracts & Schema Definition (`src/models/`)
-- Define `CapabilityArtifact`, `Step`, `LocatorStrategy` (supporting `frame_selector: Optional[str] = None` for legacy `<frame>`/`<iframe>` boundaries), `Checkpoint`, `BusinessOutcomeMatch`.
-- Define `ExecutionResult`, `ExecutionStatus`, `StepLog`.
-- Define `InterventionRequest`, `InterventionRecord`, and `OperatorAction` (with action types `click`, `input`, `navigation`, `dialog`).
-- Implement serialization/deserialization methods with strict validation.
+- [x] Define `CapabilityArtifact`, `Step`, `LocatorStrategy` (supporting `frame_selector: Optional[str] = None` for legacy `<frame>`/`<iframe>` boundaries), `Checkpoint`, `BusinessOutcomeMatch` in [`src/models/artifact.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/artifact.py).
+- [x] Define `ExecutionResult`, `ExecutionStatus`, `StepLog` in [`src/models/result.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/result.py).
+- [x] Define `InterventionRequest`, `InterventionRecord`, and `OperatorAction` in [`src/models/human.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/human.py).
+- [x] Implement serialization/deserialization methods with strict validation.
 
 ### Phase 4: Deterministic Replay Engine (`src/engine/`)
-- Implement `ReplayExecutor` in `src/engine/executor.py`:
-  - Browser context initialization (Playwright async/sync API).
-  - Parameter injection engine: replaces `{{key}}` from input dict and dynamically resolves `{{base_url}}` from CLI `--base-url`, tenant overlays, or `TARGET_APP_URL` environment variable (default: `http://127.0.0.1:8000`).
-  - Canonical path resolver: automatically prepends base host and tenant route prefix when navigation steps specify relative paths (e.g. `/members`).
-  - Multi-tier locator resolution with frame scoping:
-    - Search root resolution (`get_search_context()`: returns `page.frame_locator(target.frame_selector)` if framed, else `page`).
-    1. Role & accessible name (`root.get_by_role(...)`)
-    2. Accessible text / label (`root.get_by_label(...)`, `root.get_by_text(...)`)
-    3. CSS selector (`root.locator(...)`)
-    4. XPath selector (`root.locator(...)`)
-  - Auto-wait, retry loop, and custom timeouts.
-  - Action dispatchers: `click`, `fill`, `navigate`, `extract`, `assert`, `wait`.
-  - **Irreversible Step Execution Gating:**
-    - Evaluates `step.is_irreversible` before dispatching mutating actions.
-    - In unattended/headless mode without explicit `--allow-irreversible` authorization: halts safely before execution, captures pre-execution state, and returns `HARD_FAILURE` (`outcome_code: IRREVERSIBLE_ACTION_BLOCKED`).
-    - In interactive/headed mode: halts and routes to `EscalationManager` requesting human authorization (`[C] Confirm & commit` / `[A] Abort`) before proceeding.
-  - **Multi-Condition State Observation Loop (Race Condition Protection):**
-    - Immediately following form submission or before executing any `extract` step, executes a concurrent observation race evaluating `checkpoint.success_condition`, all declared `checkpoint.business_outcomes`, and security escalation alerts.
-    - If a business outcome matches (e.g. `MEMBER_NOT_FOUND`): immediately short-circuits execution, sets status to `BUSINESS_OUTCOME`, records outcome code/message, and cleanly skips extraction steps without locator timeout delays.
-    - If success condition is confirmed: proceeds to execute `extract` steps on verified DOM elements.
-    - If an escalation alert matches: transitions to `EscalationManager` without killing the live session.
-    - If timeout elapses: transitions to `HARD_FAILURE` and activates rich failure capture.
-  - Output data extraction and structured result compilation upon verified success states.
-  - **Automated Rich Failure Capture Seam:** On encountering an unrecoverable locator or assertion error (`HARD_FAILURE`), immediately captures a full-page screenshot (`evidence/failure_*.png`) and dumps the complete DOM HTML snapshot (`evidence/failure_*.html`), injecting the file paths and failure context into `ExecutionResult.evidence_path` and `ExecutionResult.debug_context`.
-- Create unit & integration tests against mock app for:
-  - Happy path replay (`12345`).
-  - Business outcome classification (`99999`).
-  - Expected error reporting and rich failure artifact capture.
+- [x] Implement `ReplayExecutor` in [`src/engine/executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/engine/executor.py):
+  - [x] Browser context initialization (Playwright async API).
+  - [x] Parameter injection engine: replaces `{{key}}` and dynamically resolves `{{base_url}}` (from inputs, defaults, or environment).
+  - [x] Canonical path resolver: automatically prepends base host when navigation steps specify relative paths (`/members`).
+  - [x] Multi-tier locator resolution with frame scoping (`page.frame_locator`) across Role &rarr; Label &rarr; Text &rarr; CSS &rarr; XPath with strict timeout budgeting.
+  - [x] Action dispatchers: `click`, `fill`, `navigate`, `extract`, `assert`, `wait`, `click_coordinate`.
+  - [x] **Irreversible Step Execution Gating:** Safe halt and failure capture when `is_irreversible: true` without `allow_irreversible`.
+  - [x] **Pre-Extraction Multi-Condition State Observation Loop:** Concurrently races success checkpoints against declared business outcomes (`MEMBER_NOT_FOUND`, `FRAUD_HOLD`) to short-circuit immediately without locator timeout delays.
+  - [x] Structured output extraction and result compilation upon verified success states.
+  - [x] **Automated Rich Failure Capture Seam:** Dumps full-page screenshots (`evidence/failure_*.png`) and DOM HTML snapshots (`evidence/failure_*.html`) on `HARD_FAILURE`.
+- [x] Create comprehensive test suite in [`tests/test_replay_executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/test_replay_executor.py) & isolation fixture in [`tests/conftest.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/conftest.py).
+- [x] Boost test coverage via `cover-agent` to >83%.
 
 ### Phase 5: Safety Guardrails & PII Redaction (`src/guardrails/`)
-- Implement `GuardrailPolicy` in `src/guardrails/policy.py`:
-  - **Domain / URL Allowlist:** Blocks requests outside configured domains (`127.0.0.1`, `localhost`, or specified customer domains).
-  - **Action Allowlist:** Restricts executable action types.
-  - **Irreversible Action Gating Policy:** Defines policy branches for `is_irreversible: true` steps:
-    - `BLOCK_UNATTENDED`: Default fail-safe policy preventing unattended headless jobs from committing financial mutations without explicit clearance.
-    - `ROUTE_TO_HUMAN`: Escalation prompt presenting transaction summary for operator confirmation.
-    - `AUDIT_LOG`: Logs immutable non-repudiation audit record on approved execution.
-- Implement `PIIRedactor` in `src/guardrails/redactor.py`:
-  - Regex scrubbers for SSNs (`\d{3}-\d{2}-\d{4}`), Credit Card PANs, Account Numbers, and Bearer Tokens.
-  - Applied automatically to all log sinks, step inputs, and serialized traces.
+- [ ] Implement `GuardrailPolicy` in `src/guardrails/policy.py`:
+  - [ ] **Domain / URL Allowlist:** Blocks requests outside configured domains (`127.0.0.1`, `localhost`, or specified customer domains).
+  - [ ] **Action Allowlist:** Restricts executable action types.
+  - [ ] **Irreversible Action Gating Policy:** Defines policy branches for `is_irreversible: true` steps (`BLOCK_UNATTENDED`, `ROUTE_TO_HUMAN`, `AUDIT_LOG`).
+- [ ] Implement `PIIRedactor` in `src/guardrails/redactor.py`:
+  - [ ] Regex scrubbers for SSNs (`\d{3}-\d{2}-\d{4}`), Credit Card PANs, Account Numbers, and Bearer Tokens.
+  - [ ] Applied automatically to all log sinks, step inputs, and serialized traces.
+- [ ] Comprehensive unit tests for domain validation, blocked actions, and PII masking.
 
 ### Phase 6: Human-in-the-Loop Escalation, Live Handoff & Action Recording (`src/human/`)
-- Implement `EscalationManager` in `src/human/escalation.py`:
-  - **Detection & Trigger:** Triggers when a locator fails after all fallbacks, an unexpected barrier/lockout appears, or an irreversible action requires authorization.
-  - **Session Freezing:** Pauses automation without closing the Playwright browser/page session, keeping cookies, form state, and DOM intact.
-  - **Diagnostic Context:** Captures initial failure screenshot to `evidence/escalation_before_*.png` and initializes `InterventionRecord`.
-  - **Active Session Operator Action Recording ("Record What the Human Did"):**
-    - Attaches Playwright lifecycle event handlers:
-      - `page.on("framenavigated")` &rarr; records page URL changes initiated by the human operator.
-      - `page.on("dialog")` &rarr; records alerts/confirms triggered and accepted/dismissed by the operator.
-    - Injects a lightweight DOM observer via `page.expose_binding("__recordHumanAction", ...)`:
-      - Listens for `click` events (capturing element tag, accessible role/name, text, and selector).
-      - Listens for `change` / `input` events (capturing input element identifier and sanitized, PII-scrubbed value).
-    - Appends each captured event chronologically into `InterventionRecord.operator_actions`.
-  - **Operator Control CLI:** Presents operator with clear failure diagnostics and interactive options:
-    `[R] Resume automation` / `[A] Abort execution` / `[M] Mark step complete and proceed`.
-  - **Control Re-acquisition & Resume:**
-    - Safely detaches Playwright and DOM event listeners.
-    - Captures post-intervention screenshot (`evidence/escalation_after_*.png`).
-    - Appends completed `InterventionRecord` to `ExecutionResult.interventions`.
-    - Re-evaluates page state / checkpoint before cleanly resuming automated execution.
+- [ ] Implement `EscalationManager` in `src/human/escalation.py`:
+  - [ ] **Detection & Trigger:** Triggers on locator exhaustion, unexpected barriers/lockout, or required authorization.
+  - [ ] **Session Freezing:** Pauses automation without closing the Playwright browser/page session.
+  - [ ] **Diagnostic Context:** Captures initial failure screenshot to `evidence/escalation_before_*.png`.
+  - [ ] **Active Session Operator Action Recording:** Attaches Playwright lifecycle event handlers (`framenavigated`, `dialog`) and injects DOM observer (`__recordHumanAction`) capturing operator clicks and inputs.
+  - [ ] **Operator Control CLI:** Interactive prompts (`[R] Resume`, `[A] Abort`, `[M] Mark step complete`).
+  - [ ] **Control Re-acquisition & Resume:** Detaches listeners, captures post-intervention screenshot (`evidence/escalation_after_*.png`), and cleanly resumes automation.
+- [ ] Integration tests demonstrating seamless handoff and operator action recording.
 
 ### Phase 7: LLM Discovery Agent Loop & Compiler Seam (`src/agent/`)
-- Implement `DOMInspector` in `src/agent/inspector.py`:
-  - Injected JavaScript / Playwright introspection utility for live `ElementHandle` resolution.
-  - Detects if an element resides inside a `<frame>` or `<iframe>` and resolves its enclosing `frame_selector`.
-  - Programmatically derives a verified, 4-tier locator hierarchy directly from the active DOM:
-    1. **Role & Accessible Name:** `role:<tag_or_aria>[name='...']` via Playwright accessibility API.
-    2. **Accessible Text / Label Anchor:** Associated `<label>`, placeholder, or visible text anchor.
-    3. **Structural CSS:** Unique ID (`#id`), unique attribute (`input[name='...']`), or scoped CSS path.
-    4. **Stable XPath:** Relative text-contained or structural XPath (`//button[contains(text(), '...')]`).
-  - Verifies in real-time that each fallback selector uniquely resolves to the target node on the active page/frame.
-- Implement `DiscoveryAgent` in `src/agent/discovery.py`:
-  - Visual & accessibility state extractor (dumps compact accessibility tree + interactive element map).
-  - System prompt incorporating banking automation context and tool definitions.
-  - Clean tool calling interface (LLM specifies high-level target intent without hallucinating CSS/XPath):
-    - `navigate(url)`
-    - `click(target_description)`
-    - `click_coordinate(x, y)` (Fallback for canvas, embedded applets, or surfaces lacking a clean DOM; uses `document.elementFromPoint(x, y)` to resolve DOM node if present)
-    - `fill(target_description, value)`
-    - `extract(field_name, target_description)`
-    - `finish_task(summary, output_fields)`
-    - `request_human_help(reason)`
-  - Tool execution harness intercepts each action on the live page, uses `DOMInspector` to bind verified `LocatorStrategy` to the step, and executes the action.
-  - Run loop with termination bounds (max steps = 15, timeout = 120s).
-- Implement `ArtifactCompiler` in `src/agent/compiler.py`:
-  - Synthesizes recorded steps into a normalized `CapabilityArtifact`.
-  - Canonicalizes navigation URLs (stripping concrete host origins like `http://127.0.0.1:8000` into `{{base_url}}/members` or relative paths `/members` to ensure multi-tenant portability).
-  - Extracts parameters (replaces literal inputs like `"12345"` with `{{member_id}}`).
-  - Formulates success checkpoint and business outcome assertions.
-  - Validates output artifact strictly against `CapabilityArtifact` Pydantic model.
+- [ ] Implement `DOMInspector` in `src/agent/inspector.py`:
+  - [ ] Injected Playwright introspection utility for live `ElementHandle` resolution.
+  - [ ] Programmatically derives and validates a verified 4-tier locator hierarchy (Role &rarr; Label/Text &rarr; Scoped CSS &rarr; Stable XPath) with frame boundary detection.
+- [ ] Implement `DiscoveryAgent` in `src/agent/discovery.py`:
+  - [ ] Compact accessibility tree and interactive element map extraction.
+  - [ ] Tool calling interface (`navigate`, `click`, `fill`, `extract`, `finish_task`, `request_human_help`).
+  - [ ] Live execution interception binding verified `LocatorStrategy` to recorded steps.
+- [ ] Implement `ArtifactCompiler` in `src/agent/compiler.py`:
+  - [ ] Normalizes trajectory into valid `CapabilityArtifact`.
+  - [ ] Parameterizes inputs (`12345` &rarr; `{{member_id}}`).
+  - [ ] Emits validated capability JSON schemas.
 
 ### Phase 8: Typer CLI & Developer Workflow (`src/cli.py`)
-- CLI command structure:
-  - `python -m src.cli serve-target [--port 8000]`
-  - `python -m src.cli discover --goal "Find savings balance for member 12345" --url "http://127.0.0.1:8000/members" --output capabilities/member_lookup.json`
-  - `python -m src.cli replay --artifact capabilities/member_lookup.json --params '{"member_id":"12345"}' [--base-url http://127.0.0.1:8000] [--allow-irreversible] [--headed]`
-  - `python -m src.cli test-harness` (Executes the complete test matrix).
+- [ ] Implement Typer CLI in `src/cli.py`:
+  - [ ] `python -m src.cli serve-target [--port 8000]`
+  - [ ] `python -m src.cli discover --goal "..." --url "..." --output ...`
+  - [ ] `python -m src.cli replay --artifact ... --params ...`
+  - [ ] `python -m src.cli test-harness`
 
 ### Phase 9: End-to-End Evidence Generation (`evidence/`)
-- Execute discovery run to generate `capabilities/member_lookup.json`.
-- Execute and record evidence files:
-  - `evidence/discovery_run.log`: Full discovery transcript demonstrating LLM reasoning, intent-based tool execution, live DOM inspector deriving validated locator hierarchies (Role -> Text -> CSS -> XPath), and the compiled capability artifact.
-  - `evidence/replay_happy_path.log`: Replay with `member_id: 12345` confirming success and extracted balance `$4,250.75`.
-  - `evidence/replay_business_outcome.log`: Replay with `member_id: 99999` confirming clean detection of `MEMBER_NOT_FOUND` business outcome via the Multi-Condition Observation Loop (bypassing balance extraction cleanly without timing out on `#savings-balance-val`).
-  - `evidence/replay_escalation.log`, `evidence/escalation_before.png`, & `evidence/escalation_after.png`: Replay hitting account `67890` or simulated failure, demonstrating live session human takeover, real-time capture and structured logging of operator actions (clicks, inputs, navigations), and successful resumption.
-  - `evidence/replay_hard_failure.log`, `evidence/failure_member_lookup.png`, & `evidence/failure_member_lookup.html`: Replay intentionally exercising an invalid locator or broken invariant without escalation, demonstrating clean `HARD_FAILURE` error classification and automatic dumping of rich full-page screenshot and complete DOM snapshot artifacts.
-  - `evidence/replay_irreversible_blocked.log`: Replay exercising a funds transfer confirmation in unattended mode without `--allow-irreversible`, demonstrating fail-safe halting and audit trail generation without committing financial mutation.
+- [ ] Generate `evidence/discovery_run.log`.
+- [ ] Generate `evidence/replay_happy_path.log`.
+- [ ] Generate `evidence/replay_business_outcome.log`.
+- [ ] Generate `evidence/replay_escalation.log`, `evidence/escalation_before.png`, `evidence/escalation_after.png`.
+- [ ] Generate `evidence/replay_hard_failure.log`, `evidence/failure_*.png`, `evidence/failure_*.html`.
+- [ ] Generate `evidence/replay_irreversible_blocked.log`.
 
 ### Phase 10: Comprehensive Documentation (`README.md` & `REPORT.md`)
-- **`README.md`:** Complete installation instructions (with `uv`), environment configuration, command-line demo walk-throughs, and mock server operations.
-- **`REPORT.md`:** Thorough technical write-up strictly organized under the 7 mandated headings:
-  1. *Architecture*
-  2. *Artifact schema*
-  3. *Determinism & error handling*
-  4. *Heterogeneity & multi-tenant*
-  5. *Escalation & handoff*
-  6. *Safety*
-  7. *Cuts*
+- [ ] Author `README.md` with complete installation, architecture summary, and CLI usage.
+- [ ] Author `REPORT.md` answering the 7 required engineering specification sections.
 
 ---
 

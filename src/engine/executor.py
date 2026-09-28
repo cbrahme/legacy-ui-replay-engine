@@ -541,7 +541,7 @@ class ReplayExecutor:
             if outcome.match_type == "url_contains":
                 return outcome.pattern in page.url if outcome.pattern else outcome.target in page.url
 
-            loc = page.locator(outcome.target)
+            loc = self._build_playwright_locator(page, outcome.target)
             if outcome.match_type == "element_visible":
                 return await loc.first.is_visible()
 

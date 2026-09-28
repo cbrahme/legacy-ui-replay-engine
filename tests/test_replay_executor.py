@@ -313,3 +313,44 @@ async def test_replay_invalid_success_condition_target(target_server_url, tmp_pa
     assert result.status == ExecutionStatus.HARD_FAILURE
     assert result.outcome_code == "CHECKPOINT_FAILED"
     assert "not satisfied" in result.outcome_message.lower()
+
+
+@pytest.mark.asyncio
+async def test_replay_business_outcome_prefixed_target(target_server_url, tmp_path):
+    """Verifies that business outcomes with specialized prefixes (e.g. text:) resolve correctly."""
+    artifact = CapabilityArtifact(
+        id="prefixed_outcome_test",
+        name="Prefixed Outcome Test",
+        description="Tests prefix-based business outcome locators",
+        target_path="/members",
+        steps=[
+            Step(step_id=1, action=ActionType.NAVIGATE, value="{{base_url}}/members?member_id=99999"),
+        ],
+        checkpoint={
+            "success_condition": {
+                "type": "element_visible",
+                "target": "table.nonexistent",
+                "timeout_ms": 2000,
+            },
+            "business_outcomes": [
+                {
+                    "code": "MEMBER_NOT_FOUND_PREFIX",
+                    "match_type": "element_text_contains",
+                    "target": "text:Member record not found",
+                    "pattern": "not found in system",
+                    "description": "Prefix-based text locator successfully matched",
+                }
+            ],
+        },
+    )
+
+    executor = ReplayExecutor(
+        base_url=target_server_url,
+        headless=True,
+        evidence_dir=str(tmp_path),
+    )
+
+    result = await executor.execute(artifact)
+    assert result.status == ExecutionStatus.BUSINESS_OUTCOME
+    assert result.outcome_code == "MEMBER_NOT_FOUND_PREFIX"
+
