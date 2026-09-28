@@ -20,3 +20,9 @@ Thumbs.db
 # Test & trace artifacts (keep evidence directory tracked, but exclude large browser dumps/videos if any)
 *.webm
 *.zip
+.coverage
+coverage.xml
+cover_agent_unit_test_runs.db
+run.log
+test_results.html
+*.patch

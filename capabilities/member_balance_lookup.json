@@ -1,0 +1,99 @@
+{
+  "id": "member_balance_lookup",
+  "name": "Member Savings Balance Lookup",
+  "version": "1.0.0",
+  "description": "Searches for a credit union member by ID and extracts their current savings balance and status.",
+  "target_path": "/members",
+  "input_schema": {
+    "member_id": {
+      "type": "string",
+      "description": "Unique 5-digit member account identifier",
+      "example": "12345"
+    },
+    "base_url": {
+      "type": "string",
+      "description": "Base host origin",
+      "default": "http://127.0.0.1:8000"
+    }
+  },
+  "output_schema": {
+    "savings_balance": {
+      "type": "string"
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "value": "{{base_url}}/members",
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "target": {
+        "primary": "role:textbox[name='Member Search ID']",
+        "fallbacks": [
+          "input[name='member_id']",
+          "#member_id",
+          "//input[@name='member_id']"
+        ],
+        "rationale": "Uses accessible name for input field with fallback to name and id attributes"
+      },
+      "value": "{{member_id}}",
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "target": {
+        "primary": "role:button[name='Search Records']",
+        "fallbacks": [
+          "button[type='submit']",
+          "text:Search Records",
+          "//button[contains(text(), 'Search Records')]"
+        ],
+        "rationale": "Accessible button with fallbacks to CSS button type and text"
+      },
+      "timeout_ms": 5000
+    },
+    {
+      "step_id": 4,
+      "action": "extract",
+      "target": {
+        "primary": "#savings-balance-val",
+        "fallbacks": [
+          "//td[@id='savings-balance-val']",
+          "tr.account-row-savings td.balance",
+          "//tr[contains(., 'Savings')]//td[contains(@class, 'balance')]"
+        ],
+        "rationale": "Extracts savings balance from legacy accounts table using type-code ID and structural row selectors"
+      },
+      "field_name": "savings_balance",
+      "timeout_ms": 5000
+    }
+  ],
+  "checkpoint": {
+    "success_condition": {
+      "type": "element_visible",
+      "target": "#accounts-table",
+      "timeout_ms": 5000
+    },
+    "business_outcomes": [
+      {
+        "code": "MEMBER_NOT_FOUND",
+        "match_type": "element_text_contains",
+        "target": "#not-found-alert",
+        "pattern": "not found in core system|not found in system",
+        "description": "Member record does not exist in core banking system"
+      },
+      {
+        "code": "FRAUD_HOLD",
+        "match_type": "element_text_contains",
+        "target": "#account-locked-alert",
+        "pattern": "Security Lockout|locked due to suspected security flag|Supervisor clearance",
+        "description": "Account is locked under fraud investigation"
+      }
+    ]
+  }
+}
