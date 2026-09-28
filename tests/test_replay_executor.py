@@ -354,3 +354,26 @@ async def test_replay_business_outcome_prefixed_target(target_server_url, tmp_pa
     assert result.status == ExecutionStatus.BUSINESS_OUTCOME
     assert result.outcome_code == "MEMBER_NOT_FOUND_PREFIX"
 
+
+@pytest.mark.asyncio
+async def test_capture_failure_artifacts_error_handling(target_server_url, tmp_path):
+    """Verifies that _capture_failure_artifacts handles errors gracefully."""
+    executor = ReplayExecutor(
+        base_url=target_server_url,
+        headless=True,
+        evidence_dir=str(tmp_path),
+    )
+
+    class MockPage:
+        async def screenshot(self, *args, **kwargs):
+            raise Exception("Screenshot error")
+
+        async def content(self):
+            raise Exception("Content error")
+
+    mock_page = MockPage()
+    img_path, html_path = await executor._capture_failure_artifacts(mock_page, "test_capability", "step_1")
+
+    assert img_path is None
+    assert html_path is None
+

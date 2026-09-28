@@ -8,6 +8,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from playwright.async_api import Browser, BrowserContext, ElementHandle, FrameLocator, Locator, Page, async_playwright
 
+from src.guardrails.policy import (
+    ActionViolationError,
+    DomainViolationError,
+    GuardrailPolicy,
+    IrreversiblePolicy,
+)
+from src.guardrails.redactor import PIIRedactor
 from src.models.artifact import (
     ActionType,
     BusinessOutcomeMatch,
@@ -41,6 +48,8 @@ class ReplayExecutor:
         slow_mo: int = 0,
         evidence_dir: str = "evidence",
         allow_irreversible: bool = False,
+        policy: Optional[GuardrailPolicy] = None,
+        redactor: Optional[PIIRedactor] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.headless = headless
@@ -48,6 +57,8 @@ class ReplayExecutor:
         self.evidence_dir = Path(evidence_dir)
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.allow_irreversible = allow_irreversible
+        self.policy = policy or GuardrailPolicy()
+        self.redactor = redactor or PIIRedactor()
 
     async def execute(
         self,
@@ -98,44 +109,52 @@ class ReplayExecutor:
                     )
                     if obs_status == "BUSINESS_OUTCOME" and outcome_match:
                         total_duration = (time.perf_counter() - start_time) * 1000.0
-                        return ExecutionResult(
-                            status=ExecutionStatus.BUSINESS_OUTCOME,
-                            capability_id=artifact.id,
-                            version=artifact.version,
-                            outcome_code=outcome_match.code,
-                            outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
-                            execution_time_ms=round(total_duration, 2),
-                            steps_executed=len(step_logs),
-                            step_logs=step_logs,
-                            data=None,
+                        return self._sanitize_result(
+                            ExecutionResult(
+                                status=ExecutionStatus.BUSINESS_OUTCOME,
+                                capability_id=artifact.id,
+                                version=artifact.version,
+                                outcome_code=outcome_match.code,
+                                outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
+                                execution_time_ms=round(total_duration, 2),
+                                steps_executed=len(step_logs),
+                                step_logs=step_logs,
+                                data=None,
+                            )
                         )
                     elif obs_status != "SUCCESS":
                         evidence_img, evidence_html = await self._capture_failure_artifacts(
                             page, artifact.id, f"{step.step_id}_pre_extract"
                         )
                         total_duration = (time.perf_counter() - start_time) * 1000.0
-                        return ExecutionResult(
-                            status=ExecutionStatus.HARD_FAILURE,
-                            capability_id=artifact.id,
-                            version=artifact.version,
-                            outcome_code="CHECKPOINT_FAILED",
-                            outcome_message=(
-                                f"Success condition '{artifact.checkpoint.success_condition.type}' "
-                                f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied before extraction."
-                            ),
-                            execution_time_ms=round(total_duration, 2),
-                            steps_executed=len(step_logs),
-                            step_logs=step_logs,
-                            evidence_path=evidence_img,
-                            debug_context={
-                                "html_snapshot": evidence_html,
-                                "url": page.url,
-                                "target": artifact.checkpoint.success_condition.target,
-                            },
+                        return self._sanitize_result(
+                            ExecutionResult(
+                                status=ExecutionStatus.HARD_FAILURE,
+                                capability_id=artifact.id,
+                                version=artifact.version,
+                                outcome_code="CHECKPOINT_FAILED",
+                                outcome_message=(
+                                    f"Success condition '{artifact.checkpoint.success_condition.type}' "
+                                    f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied before extraction."
+                                ),
+                                execution_time_ms=round(total_duration, 2),
+                                steps_executed=len(step_logs),
+                                step_logs=step_logs,
+                                evidence_path=evidence_img,
+                                debug_context={
+                                    "html_snapshot": evidence_html,
+                                    "url": page.url,
+                                    "target": artifact.checkpoint.success_condition.target,
+                                },
+                            )
                         )
 
                 # 1. Check Irreversible Action Policy Gate
-                if step.is_irreversible and not self.allow_irreversible:
+                can_proceed, block_reason = self.policy.evaluate_irreversible_step(
+                    is_irreversible=step.is_irreversible,
+                    allow_irreversible=self.allow_irreversible,
+                )
+                if not can_proceed:
                     evidence_img, evidence_html = await self._capture_failure_artifacts(
                         page, artifact.id, step.step_id
                     )
@@ -144,29 +163,31 @@ class ReplayExecutor:
                             step_id=step.step_id,
                             action=step.action.value,
                             status="FAILED",
-                            error_message="Action blocked by irreversible action policy gate",
+                            error_message=block_reason or "Action blocked by irreversible action policy gate",
                         )
                     )
                     total_duration = (time.perf_counter() - start_time) * 1000.0
-                    return ExecutionResult(
-                        status=ExecutionStatus.HARD_FAILURE,
-                        capability_id=artifact.id,
-                        version=artifact.version,
-                        outcome_code="IRREVERSIBLE_ACTION_BLOCKED",
-                        outcome_message=(
-                            f"Step {step.step_id} ({step.action.value}) is marked irreversible and "
-                            "requires explicit authorization (allow_irreversible=True)."
-                        ),
-                        execution_time_ms=round(total_duration, 2),
-                        steps_executed=len(step_logs),
-                        step_logs=step_logs,
-                        evidence_path=evidence_img,
-                        debug_context={
-                            "html_snapshot": evidence_html,
-                            "step_id": step.step_id,
-                            "action": step.action.value,
-                            "url": page.url,
-                        },
+                    return self._sanitize_result(
+                        ExecutionResult(
+                            status=ExecutionStatus.HARD_FAILURE,
+                            capability_id=artifact.id,
+                            version=artifact.version,
+                            outcome_code="IRREVERSIBLE_ACTION_BLOCKED",
+                            outcome_message=block_reason or (
+                                f"Step {step.step_id} ({step.action.value}) is marked irreversible and "
+                                "requires explicit authorization (allow_irreversible=True)."
+                            ),
+                            execution_time_ms=round(total_duration, 2),
+                            steps_executed=len(step_logs),
+                            step_logs=step_logs,
+                            evidence_path=evidence_img,
+                            debug_context={
+                                "html_snapshot": evidence_html,
+                                "step_id": step.step_id,
+                                "action": step.action.value,
+                                "url": page.url,
+                            },
+                        )
                     )
 
                 step_start = time.perf_counter()
@@ -191,41 +212,51 @@ class ReplayExecutor:
                             error_message=str(step_err),
                         )
                     )
+                    outcome_code = "STEP_EXECUTION_FAILED"
+                    if isinstance(step_err, DomainViolationError):
+                        outcome_code = "DOMAIN_NOT_ALLOWED"
+                    elif isinstance(step_err, ActionViolationError):
+                        outcome_code = "ACTION_NOT_ALLOWED"
+
                     evidence_img, evidence_html = await self._capture_failure_artifacts(
                         page, artifact.id, step.step_id
                     )
                     total_duration = (time.perf_counter() - start_time) * 1000.0
-                    return ExecutionResult(
-                        status=ExecutionStatus.HARD_FAILURE,
-                        capability_id=artifact.id,
-                        version=artifact.version,
-                        outcome_code="STEP_EXECUTION_FAILED",
-                        outcome_message=f"Step {step.step_id} failed: {step_err}",
-                        execution_time_ms=round(total_duration, 2),
-                        steps_executed=len(step_logs),
-                        step_logs=step_logs,
-                        evidence_path=evidence_img,
-                        debug_context={
-                            "html_snapshot": evidence_html,
-                            "step_id": step.step_id,
-                            "action": step.action.value,
-                            "error": str(step_err),
-                            "url": page.url,
-                        },
+                    return self._sanitize_result(
+                        ExecutionResult(
+                            status=ExecutionStatus.HARD_FAILURE,
+                            capability_id=artifact.id,
+                            version=artifact.version,
+                            outcome_code=outcome_code,
+                            outcome_message=f"Step {step.step_id} failed: {step_err}",
+                            execution_time_ms=round(total_duration, 2),
+                            steps_executed=len(step_logs),
+                            step_logs=step_logs,
+                            evidence_path=evidence_img,
+                            debug_context={
+                                "html_snapshot": evidence_html,
+                                "step_id": step.step_id,
+                                "action": step.action.value,
+                                "error": str(step_err),
+                                "url": page.url,
+                            },
+                        )
                     )
 
             if has_observed_pre_extract:
                 total_duration = (time.perf_counter() - start_time) * 1000.0
-                return ExecutionResult(
-                    status=ExecutionStatus.SUCCESS,
-                    capability_id=artifact.id,
-                    version=artifact.version,
-                    data=extracted_data if extracted_data else None,
-                    outcome_code="SUCCESS",
-                    outcome_message="Execution completed and success checkpoint verified",
-                    execution_time_ms=round(total_duration, 2),
-                    steps_executed=len(step_logs),
-                    step_logs=step_logs,
+                return self._sanitize_result(
+                    ExecutionResult(
+                        status=ExecutionStatus.SUCCESS,
+                        capability_id=artifact.id,
+                        version=artifact.version,
+                        data=extracted_data if extracted_data else None,
+                        outcome_code="SUCCESS",
+                        outcome_message="Execution completed and success checkpoint verified",
+                        execution_time_ms=round(total_duration, 2),
+                        steps_executed=len(step_logs),
+                        step_logs=step_logs,
+                    )
                 )
 
             # Multi-Condition Observation Loop: Race success against declared business outcomes
@@ -238,53 +269,59 @@ class ReplayExecutor:
             total_duration = (time.perf_counter() - start_time) * 1000.0
 
             if observation_status == "BUSINESS_OUTCOME" and outcome_match:
-                return ExecutionResult(
-                    status=ExecutionStatus.BUSINESS_OUTCOME,
-                    capability_id=artifact.id,
-                    version=artifact.version,
-                    outcome_code=outcome_match.code,
-                    outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
-                    execution_time_ms=round(total_duration, 2),
-                    steps_executed=len(step_logs),
-                    step_logs=step_logs,
-                    data=None,
+                return self._sanitize_result(
+                    ExecutionResult(
+                        status=ExecutionStatus.BUSINESS_OUTCOME,
+                        capability_id=artifact.id,
+                        version=artifact.version,
+                        outcome_code=outcome_match.code,
+                        outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
+                        execution_time_ms=round(total_duration, 2),
+                        steps_executed=len(step_logs),
+                        step_logs=step_logs,
+                        data=None,
+                    )
                 )
 
             if observation_status == "SUCCESS":
-                return ExecutionResult(
-                    status=ExecutionStatus.SUCCESS,
-                    capability_id=artifact.id,
-                    version=artifact.version,
-                    data=extracted_data if extracted_data else None,
-                    outcome_code="SUCCESS",
-                    outcome_message="Execution completed and success checkpoint verified",
-                    execution_time_ms=round(total_duration, 2),
-                    steps_executed=len(step_logs),
-                    step_logs=step_logs,
+                return self._sanitize_result(
+                    ExecutionResult(
+                        status=ExecutionStatus.SUCCESS,
+                        capability_id=artifact.id,
+                        version=artifact.version,
+                        data=extracted_data if extracted_data else None,
+                        outcome_code="SUCCESS",
+                        outcome_message="Execution completed and success checkpoint verified",
+                        execution_time_ms=round(total_duration, 2),
+                        steps_executed=len(step_logs),
+                        step_logs=step_logs,
+                    )
                 )
 
             # Observation timed out or unfulfilled
             evidence_img, evidence_html = await self._capture_failure_artifacts(
                 page, artifact.id, "checkpoint"
             )
-            return ExecutionResult(
-                status=ExecutionStatus.HARD_FAILURE,
-                capability_id=artifact.id,
-                version=artifact.version,
-                outcome_code="CHECKPOINT_FAILED",
-                outcome_message=(
-                    f"Success condition '{artifact.checkpoint.success_condition.type}' "
-                    f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied."
-                ),
-                execution_time_ms=round(total_duration, 2),
-                steps_executed=len(step_logs),
-                step_logs=step_logs,
-                evidence_path=evidence_img,
-                debug_context={
-                    "html_snapshot": evidence_html,
-                    "url": page.url,
-                    "target": artifact.checkpoint.success_condition.target,
-                },
+            return self._sanitize_result(
+                ExecutionResult(
+                    status=ExecutionStatus.HARD_FAILURE,
+                    capability_id=artifact.id,
+                    version=artifact.version,
+                    outcome_code="CHECKPOINT_FAILED",
+                    outcome_message=(
+                        f"Success condition '{artifact.checkpoint.success_condition.type}' "
+                        f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied."
+                    ),
+                    execution_time_ms=round(total_duration, 2),
+                    steps_executed=len(step_logs),
+                    step_logs=step_logs,
+                    evidence_path=evidence_img,
+                    debug_context={
+                        "html_snapshot": evidence_html,
+                        "url": page.url,
+                        "target": artifact.checkpoint.success_condition.target,
+                    },
+                )
             )
 
         finally:
@@ -310,97 +347,103 @@ class ReplayExecutor:
         """
         rendered_value = artifact.render_parameter(step.value, params) if step.value else None
 
+        # Validate action allowlist policy
+        self.policy.validate_action(step.action)
+
         if step.action == ActionType.NAVIGATE:
             target_url = rendered_value or artifact.get_effective_url(self.base_url)
             # Resolve relative URLs
             if target_url.startswith("/"):
                 target_url = f"{self.base_url}{target_url}"
+            # Validate domain allowlist policy
+            self.policy.validate_url(target_url)
             await page.goto(target_url, timeout=step.timeout_ms)
-            return StepLog(
+            step_log = StepLog(
                 step_id=step.step_id,
                 action=step.action.value,
                 status="OK",
                 target_resolved="navigation_url",
             )
-
-        if step.action == ActionType.CLICK_COORDINATE:
+        elif step.action == ActionType.CLICK_COORDINATE:
             if not step.coordinate:
                 raise ValueError(f"Step {step.step_id} requires coordinate for CLICK_COORDINATE")
             await page.mouse.click(step.coordinate.x, step.coordinate.y)
-            return StepLog(
+            step_log = StepLog(
                 step_id=step.step_id,
                 action=step.action.value,
                 status="OK",
                 target_resolved=f"coord:({step.coordinate.x},{step.coordinate.y})",
             )
-
-        if step.action == ActionType.WAIT:
+        elif step.action == ActionType.WAIT:
             wait_time = int(rendered_value) if rendered_value and rendered_value.isdigit() else 1000
             await page.wait_for_timeout(wait_time)
-            return StepLog(
+            step_log = StepLog(
                 step_id=step.step_id,
                 action=step.action.value,
                 status="OK",
                 target_resolved=f"wait_ms:{wait_time}",
             )
+        else:
+            # Actions requiring target element resolution: CLICK, FILL, EXTRACT, ASSERT
+            if not step.target:
+                raise ValueError(f"Step {step.step_id} ({step.action.value}) requires a target locator strategy")
 
-        # Actions requiring target element resolution: CLICK, FILL, EXTRACT, ASSERT
-        if not step.target:
-            raise ValueError(f"Step {step.step_id} ({step.action.value}) requires a target locator strategy")
-
-        locator, tier_name = await self._resolve_locator(
-            page=page,
-            strategy=step.target,
-            timeout_ms=step.timeout_ms,
-        )
-
-        if step.action == ActionType.CLICK:
-            await locator.click(timeout=step.timeout_ms)
-            return StepLog(
-                step_id=step.step_id,
-                action=step.action.value,
-                status="OK",
-                target_resolved=tier_name,
+            locator, tier_name = await self._resolve_locator(
+                page=page,
+                strategy=step.target,
+                timeout_ms=step.timeout_ms,
             )
 
-        if step.action == ActionType.FILL:
-            fill_val = rendered_value or ""
-            await locator.fill(fill_val, timeout=step.timeout_ms)
-            return StepLog(
-                step_id=step.step_id,
-                action=step.action.value,
-                status="OK",
-                target_resolved=tier_name,
-            )
+            if step.action == ActionType.CLICK:
+                await locator.click(timeout=step.timeout_ms)
+                step_log = StepLog(
+                    step_id=step.step_id,
+                    action=step.action.value,
+                    status="OK",
+                    target_resolved=tier_name,
+                )
+            elif step.action == ActionType.FILL:
+                fill_val = rendered_value or ""
+                await locator.fill(fill_val, timeout=step.timeout_ms)
+                step_log = StepLog(
+                    step_id=step.step_id,
+                    action=step.action.value,
+                    status="OK",
+                    target_resolved=tier_name,
+                )
+            elif step.action == ActionType.EXTRACT:
+                text = (await locator.inner_text(timeout=step.timeout_ms)).strip()
+                field_name = step.field_name or f"field_{step.step_id}"
+                extracted_data[field_name] = text
+                step_log = StepLog(
+                    step_id=step.step_id,
+                    action=step.action.value,
+                    status="OK",
+                    target_resolved=tier_name,
+                    extracted_data={field_name: text},
+                )
+            elif step.action == ActionType.ASSERT:
+                await locator.wait_for(state="visible", timeout=step.timeout_ms)
+                if rendered_value:
+                    content = await locator.inner_text(timeout=step.timeout_ms)
+                    if rendered_value not in content:
+                        raise AssertionError(
+                            f"Step {step.step_id} assertion failed: expected '{rendered_value}' in '{content}'"
+                        )
+                step_log = StepLog(
+                    step_id=step.step_id,
+                    action=step.action.value,
+                    status="OK",
+                    target_resolved=tier_name,
+                )
+            else:
+                raise ValueError(f"Unsupported action type: {step.action}")
 
-        if step.action == ActionType.EXTRACT:
-            text = (await locator.inner_text(timeout=step.timeout_ms)).strip()
-            field_name = step.field_name or f"field_{step.step_id}"
-            extracted_data[field_name] = text
-            return StepLog(
-                step_id=step.step_id,
-                action=step.action.value,
-                status="OK",
-                target_resolved=tier_name,
-                extracted_data={field_name: text},
-            )
+        # Post-action navigation audit: verify that page URL did not redirect to a disallowed domain
+        if page.url and page.url != "about:blank":
+            self.policy.validate_url(page.url)
 
-        if step.action == ActionType.ASSERT:
-            await locator.wait_for(state="visible", timeout=step.timeout_ms)
-            if rendered_value:
-                content = await locator.inner_text(timeout=step.timeout_ms)
-                if rendered_value not in content:
-                    raise AssertionError(
-                        f"Step {step.step_id} assertion failed: expected '{rendered_value}' in '{content}'"
-                    )
-            return StepLog(
-                step_id=step.step_id,
-                action=step.action.value,
-                status="OK",
-                target_resolved=tier_name,
-            )
-
-        raise ValueError(f"Unsupported action type: {step.action}")
+        return step_log
 
     async def _resolve_locator(
         self,
@@ -610,10 +653,26 @@ class ReplayExecutor:
 
         try:
             content = await page.content()
+            sanitized_content = self.redactor.redact_text(content)
             with open(html_path, "w", encoding="utf-8") as f:
-                f.write(content)
+                f.write(sanitized_content)
             html_recorded = str(html_path)
         except Exception:
             html_recorded = None
 
         return screenshot_recorded, html_recorded
+
+    def _sanitize_result(self, result: ExecutionResult) -> ExecutionResult:
+        """Sanitizes sensitive PII from execution data, messages, step traces, and debug context."""
+        if result.data:
+            result.data = self.redactor.redact_dict(result.data)
+        if result.outcome_message:
+            result.outcome_message = self.redactor.redact_text(result.outcome_message)
+        if result.debug_context:
+            result.debug_context = self.redactor.redact_dict(result.debug_context)
+        for log in result.step_logs:
+            if log.extracted_data:
+                log.extracted_data = self.redactor.redact_dict(log.extracted_data)
+            if log.error_message:
+                log.error_message = self.redactor.redact_text(log.error_message)
+        return result

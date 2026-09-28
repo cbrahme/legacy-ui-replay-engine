@@ -325,7 +325,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 | **Phase 2** | Mock Banking Target Application | `[x] COMPLETED` | [`src/target_app/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/target_app/) (Jinja2 templates, members `12345`, `99999`, `67890`) |
 | **Phase 3** | Core Pydantic Contracts & Schema | `[x] COMPLETED` | [`src/models/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/) (`CapabilityArtifact`, `ExecutionResult`, `InterventionRecord`) |
 | **Phase 4** | Deterministic Replay Engine | `[x] COMPLETED` | [`src/engine/executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/engine/executor.py), 83% coverage, 24 unit/integration tests passing |
-| **Phase 5** | Safety Guardrails & PII Redaction | `[ ] PENDING` | `src/guardrails/policy.py`, `src/guardrails/redactor.py` |
+| **Phase 5** | Safety Guardrails & PII Redaction | `[x] COMPLETED` | [`src/guardrails/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/) (Domain allowlist, action gating, PII scrubber, 95% coverage, 14 tests) |
 | **Phase 6** | Human Escalation & Action Recording | `[ ] PENDING` | `src/human/escalation.py`, live handoff & Playwright listener capture |
 | **Phase 7** | LLM Discovery Agent Loop & Compiler | `[ ] PENDING` | `src/agent/inspector.py`, `src/agent/discovery.py`, `src/agent/compiler.py` |
 | **Phase 8** | Typer CLI & Developer Workflow | `[ ] PENDING` | `src/cli.py` (`serve-target`, `discover`, `replay`, `test-harness`) |
@@ -372,14 +372,15 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 - [x] Boost test coverage via `cover-agent` to >83%.
 
 ### Phase 5: Safety Guardrails & PII Redaction (`src/guardrails/`)
-- [ ] Implement `GuardrailPolicy` in `src/guardrails/policy.py`:
-  - [ ] **Domain / URL Allowlist:** Blocks requests outside configured domains (`127.0.0.1`, `localhost`, or specified customer domains).
-  - [ ] **Action Allowlist:** Restricts executable action types.
-  - [ ] **Irreversible Action Gating Policy:** Defines policy branches for `is_irreversible: true` steps (`BLOCK_UNATTENDED`, `ROUTE_TO_HUMAN`, `AUDIT_LOG`).
-- [ ] Implement `PIIRedactor` in `src/guardrails/redactor.py`:
-  - [ ] Regex scrubbers for SSNs (`\d{3}-\d{2}-\d{4}`), Credit Card PANs, Account Numbers, and Bearer Tokens.
-  - [ ] Applied automatically to all log sinks, step inputs, and serialized traces.
-- [ ] Comprehensive unit tests for domain validation, blocked actions, and PII masking.
+- [x] Implement `GuardrailPolicy` in [`src/guardrails/policy.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/policy.py):
+  - [x] **Domain / URL Allowlist:** Blocks requests outside configured domains (`127.0.0.1`, `localhost`, or specified customer domains/wildcards).
+  - [x] **Action Allowlist:** Restricts executable action types (`NAVIGATE`, `CLICK`, `FILL`, `EXTRACT`, etc.).
+  - [x] **Irreversible Action Gating Policy:** Defines policy branches for `is_irreversible: true` steps (`BLOCK_UNATTENDED`, `ROUTE_TO_HUMAN`, `AUDIT_LOG`).
+- [x] Implement `PIIRedactor` in [`src/guardrails/redactor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/redactor.py):
+  - [x] Regex scrubbers for SSNs (`\d{3}-\d{2}-\d{4}`), Credit Card PANs, Account Numbers (`CHK-...`, `SAV-...`), Secret Bearer/API Tokens, and Emails.
+  - [x] Applied automatically to all log sinks, step inputs, extracted data dictionaries, and serialized traces.
+- [x] Comprehensive unit and integration test suite in [`tests/test_guardrails.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/test_guardrails.py).
+- [x] Boost test coverage via `cover-agent` to >93%.
 
 ### Phase 6: Human-in-the-Loop Escalation, Live Handoff & Action Recording (`src/human/`)
 - [ ] Implement `EscalationManager` in `src/human/escalation.py`:
