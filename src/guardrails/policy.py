@@ -85,10 +85,23 @@ class GuardrailPolicy(BaseModel):
 
         clean_url = url.strip()
         # Relative URLs are resolved against base_url and inherit base_url security
-        if clean_url.startswith("/"):
+        if clean_url.startswith("/") or clean_url == "about:blank":
             return
 
-        parsed = urlparse(clean_url)
+        # Determine whether input has an explicit URI scheme or is a scheme-less target.
+        # A colon indicates a port ONLY if followed by valid port digits (e.g. localhost:8000).
+        # Non-numeric suffixes (e.g. localhost:payload, custom:data, javascript:alert(1)) are URI schemes.
+        if "://" in clean_url:
+            parsed = urlparse(clean_url)
+        elif ":" in clean_url:
+            _, rest = clean_url.split(":", 1)
+            port_candidate = rest.split("/", 1)[0]
+            if port_candidate.isdigit() and 1 <= int(port_candidate) <= 65535:
+                parsed = urlparse(f"http://{clean_url}")
+            else:
+                parsed = urlparse(clean_url)
+        else:
+            parsed = urlparse(f"http://{clean_url}")
 
         # Validate scheme
         if parsed.scheme and parsed.scheme.lower() not in [s.lower() for s in self.allowed_schemes]:
@@ -108,17 +121,30 @@ class GuardrailPolicy(BaseModel):
                 allowed_domains=self.allowed_domains,
             )
 
-        host_lower = host.lower()
+        host_lower = host.lower().rstrip(".")
         is_allowed = False
         for allowed in self.allowed_domains:
-            allowed_clean = allowed.lower().strip()
-            # Exact match or subdomain match (e.g. *.example.com or sub.example.com)
-            if host_lower == allowed_clean:
+            allowed_clean = allowed.lower().strip().rstrip(".")
+            if not allowed_clean:
+                continue
+
+            # Universal wildcard
+            if allowed_clean == "*":
                 is_allowed = True
                 break
-            if allowed_clean.startswith("*.") and host_lower.endswith(allowed_clean[1:]):
-                is_allowed = True
-                break
+
+            # Subdomain wildcard (*.example.com or .example.com)
+            if allowed_clean.startswith("*.") or allowed_clean.startswith("."):
+                base_domain = allowed_clean.lstrip("*.")
+                # Match exact apex domain or strictly dot-prefixed subdomain
+                if host_lower == base_domain or host_lower.endswith(f".{base_domain}"):
+                    is_allowed = True
+                    break
+            else:
+                # Exact host match (e.g. "localhost", "127.0.0.1", "app.example.com")
+                if host_lower == allowed_clean:
+                    is_allowed = True
+                    break
 
         if not is_allowed:
             raise DomainViolationError(

@@ -37,6 +37,75 @@ def test_guardrail_policy_valid_urls():
     policy.validate_url("http://teller.internalbank.com:8080/query")
 
 
+def test_guardrail_policy_schemeless_urls():
+    policy = GuardrailPolicy(allowed_domains=["127.0.0.1", "localhost", "*.internalbank.com"])
+
+    # Permitted schemeless loopback targets
+    policy.validate_url("127.0.0.1:8000/members")
+    policy.validate_url("localhost:3000/api")
+    policy.validate_url("localhost:8000")
+
+    # Permitted schemeless wildcard target
+    policy.validate_url("core.internalbank.com/service")
+
+    # Disallowed schemeless targets
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("evil.com/phish")
+    assert exc_info.value.host == "evil.com"
+
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("attacker.com:8080/admin")
+    assert exc_info.value.host == "attacker.com"
+
+    # Custom scheme using allowlisted single-label host name must NOT bypass scheme validation
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("localhost:payload")
+    assert exc_info.value.host == "localhost"
+
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("custom-scheme:data")
+
+
+def test_guardrail_policy_domain_wildcards_and_boundaries():
+    policy = GuardrailPolicy(
+        allowed_domains=["*.internalbank.com", ".partner.org", "localhost"]
+    )
+
+    # 1. Apex domain matching for *.domain
+    policy.validate_url("https://internalbank.com/portal")
+    policy.validate_url("http://internalbank.com:8000/dashboard")
+
+    # 2. Subdomains for *.domain
+    policy.validate_url("https://teller.internalbank.com/search")
+    policy.validate_url("https://secure.core.internalbank.com/accounts")
+
+    # 3. Trailing FQDN dot stripping
+    policy.validate_url("http://localhost./dashboard")
+    policy.validate_url("https://internalbank.com./portal")
+
+    # 4. Alternative dot-prefix (.partner.org)
+    policy.validate_url("https://partner.org/home")
+    policy.validate_url("https://auth.partner.org/login")
+
+    # 5. Prevent subdomain traversal and prefix collision bypasses
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("https://evil-internalbank.com/phish")
+    assert exc_info.value.host == "evil-internalbank.com"
+
+    with pytest.raises(DomainViolationError) as exc_info:
+        policy.validate_url("https://attackerinternalbank.com/exfiltrate")
+    assert exc_info.value.host == "attackerinternalbank.com"
+
+    with pytest.raises(DomainViolationError):
+        policy.validate_url("https://notpartner.org/login")
+
+    # 6. Universal wildcard
+    all_allowed_policy = GuardrailPolicy(allowed_domains=["*"])
+    all_allowed_policy.validate_url("https://arbitrary-bank-domain.com/feed")
+
+
+
+
 def test_guardrail_policy_disallowed_domains():
     policy = GuardrailPolicy(allowed_domains=["127.0.0.1", "localhost"])
 
@@ -353,4 +422,11 @@ async def test_dispatch_step_rejects_post_action_disallowed_navigation():
 
     assert "unauthorized-redirect.com" in str(exc_info.value)
 
+
+
+def test_evaluate_irreversible_step_audit_log_policy():
+    policy = GuardrailPolicy(irreversible_policy=IrreversiblePolicy.AUDIT_LOG)
+    can_proceed, reason = policy.evaluate_irreversible_step(is_irreversible=True, allow_irreversible=False)
+    assert can_proceed is True
+    assert reason is None
 
