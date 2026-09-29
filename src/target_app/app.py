@@ -61,6 +61,14 @@ INITIAL_MEMBERS: Dict[str, Dict[str, Any]] = {
         "is_locked": True,
         "accounts": [
             {
+                "name": "Regular Share Savings",
+                "number": "SAV-6003",
+                "balance": "$5,400.00",
+                "ledger_balance": "$5,400.00",
+                "status": "Frozen",
+                "type_code": "savings",
+            },
+            {
                 "name": "Commercial Checking",
                 "number": "CHK-6009",
                 "balance": "$82,410.00",

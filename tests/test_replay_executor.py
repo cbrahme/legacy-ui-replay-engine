@@ -24,37 +24,6 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture(scope="module")
-def target_server_url():
-    """Runs target mock server in a background thread/process or returns test host."""
-    import socket
-    import threading
-
-    # Find free port
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-
-    # Wait for server to become responsive
-    import httpx
-    import time
-    base_url = f"http://127.0.0.1:{port}"
-    for _ in range(50):
-        try:
-            r = httpx.get(f"{base_url}/health", timeout=0.5)
-            if r.status_code == 200:
-                break
-        except Exception:
-            time.sleep(0.1)
-
-    return base_url
-
 
 @pytest.mark.asyncio
 async def test_replay_happy_path(target_server_url, tmp_path):

@@ -326,7 +326,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 | **Phase 3** | Core Pydantic Contracts & Schema | `[x] COMPLETED` | [`src/models/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/models/) (`CapabilityArtifact`, `ExecutionResult`, `InterventionRecord`) |
 | **Phase 4** | Deterministic Replay Engine | `[x] COMPLETED` | [`src/engine/executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/engine/executor.py), 83% coverage, 24 unit/integration tests passing |
 | **Phase 5** | Safety Guardrails & PII Redaction | `[x] COMPLETED` | [`src/guardrails/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/) (Domain allowlist, action gating, PII scrubber, 95% coverage, 14 tests) |
-| **Phase 6** | Human Escalation & Action Recording | `[ ] PENDING` | `src/human/escalation.py`, live handoff & Playwright listener capture |
+| **Phase 6** | Human Escalation & Action Recording | `[x] COMPLETED` | [`src/human/escalation.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/human/escalation.py), 83% coverage, 12 tests, live DOM & Playwright action recording |
 | **Phase 7** | LLM Discovery Agent Loop & Compiler | `[ ] PENDING` | `src/agent/inspector.py`, `src/agent/discovery.py`, `src/agent/compiler.py` |
 | **Phase 8** | Typer CLI & Developer Workflow | `[ ] PENDING` | `src/cli.py` (`serve-target`, `discover`, `replay`, `test-harness`) |
 | **Phase 9** | End-to-End Evidence Generation | `[ ] PENDING` | Logs, screenshots, and DOM snapshots in `evidence/` |
@@ -383,14 +383,14 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 - [x] Boost test coverage via `cover-agent` to >93%.
 
 ### Phase 6: Human-in-the-Loop Escalation, Live Handoff & Action Recording (`src/human/`)
-- [ ] Implement `EscalationManager` in `src/human/escalation.py`:
-  - [ ] **Detection & Trigger:** Triggers on locator exhaustion, unexpected barriers/lockout, or required authorization.
-  - [ ] **Session Freezing:** Pauses automation without closing the Playwright browser/page session.
-  - [ ] **Diagnostic Context:** Captures initial failure screenshot to `evidence/escalation_before_*.png`.
-  - [ ] **Active Session Operator Action Recording:** Attaches Playwright lifecycle event handlers (`framenavigated`, `dialog`) and injects DOM observer (`__recordHumanAction`) capturing operator clicks and inputs.
-  - [ ] **Operator Control CLI:** Interactive prompts (`[R] Resume`, `[A] Abort`, `[M] Mark step complete`).
-  - [ ] **Control Re-acquisition & Resume:** Detaches listeners, captures post-intervention screenshot (`evidence/escalation_after_*.png`), and cleanly resumes automation.
-- [ ] Integration tests demonstrating seamless handoff and operator action recording.
+- [x] Implement `EscalationManager` in `src/human/escalation.py`:
+  - [x] **Detection & Trigger:** Triggers on locator exhaustion, unexpected barriers/lockout, or required authorization.
+  - [x] **Session Freezing:** Pauses automation without closing the Playwright browser/page session.
+  - [x] **Diagnostic Context:** Captures initial failure screenshot to `evidence/escalation_before_*.png`.
+  - [x] **Active Session Operator Action Recording:** Attaches Playwright lifecycle event handlers (`framenavigated`, `dialog`) and injects DOM observer (`__recordHumanAction`) capturing operator clicks and inputs.
+  - [x] **Operator Control CLI:** Interactive prompts (`[R] Resume`, `[A] Abort`, `[M] Mark step complete`).
+  - [x] **Control Re-acquisition & Resume:** Detaches listeners, captures post-intervention screenshot (`evidence/escalation_after_*.png`), and cleanly resumes automation.
+- [x] Integration tests demonstrating seamless handoff and operator action recording.
 
 ### Phase 7: LLM Discovery Agent Loop & Compiler Seam (`src/agent/`)
 - [ ] Implement `DOMInspector` in `src/agent/inspector.py`:

@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+import uuid
 
 from playwright.async_api import Browser, BrowserContext, ElementHandle, FrameLocator, Locator, Page, async_playwright
 
@@ -15,6 +16,7 @@ from src.guardrails.policy import (
     IrreversiblePolicy,
 )
 from src.guardrails.redactor import PIIRedactor
+from src.human.escalation import EscalationManager
 from src.models.artifact import (
     ActionType,
     BusinessOutcomeMatch,
@@ -23,6 +25,7 @@ from src.models.artifact import (
     Step,
     SuccessCondition,
 )
+from src.models.human import InterventionRecord, InterventionRequest
 from src.models.result import ExecutionResult, ExecutionStatus, StepLog
 
 
@@ -50,6 +53,9 @@ class ReplayExecutor:
         allow_irreversible: bool = False,
         policy: Optional[GuardrailPolicy] = None,
         redactor: Optional[PIIRedactor] = None,
+        escalation_manager: Optional[EscalationManager] = None,
+        escalate_on_failure: bool = False,
+        escalation_codes: Optional[Set[str]] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.headless = headless
@@ -59,6 +65,13 @@ class ReplayExecutor:
         self.allow_irreversible = allow_irreversible
         self.policy = policy or GuardrailPolicy()
         self.redactor = redactor or PIIRedactor()
+        self.escalation_manager = escalation_manager
+        self.escalate_on_failure = escalate_on_failure
+        self.escalation_codes = (
+            escalation_codes
+            if escalation_codes is not None
+            else {"ACCOUNT_LOCKED", "FRAUD_HOLD", "SUPERVISOR_CLEARANCE_REQUIRED"}
+        )
 
     async def execute(
         self,
@@ -77,6 +90,7 @@ class ReplayExecutor:
         start_time = time.perf_counter()
         step_logs: List[StepLog] = []
         extracted_data: Dict[str, Any] = {}
+        interventions: List[InterventionRecord] = []
 
         owns_browser = page is None
         playwright_instance = None
@@ -108,20 +122,100 @@ class ReplayExecutor:
                         params=params,
                     )
                     if obs_status == "BUSINESS_OUTCOME" and outcome_match:
-                        total_duration = (time.perf_counter() - start_time) * 1000.0
-                        return self._sanitize_result(
-                            ExecutionResult(
-                                status=ExecutionStatus.BUSINESS_OUTCOME,
+                        # Check if outcome triggers human escalation
+                        if self.escalation_manager and outcome_match.code in self.escalation_codes:
+                            req = InterventionRequest(
+                                request_id=f"esc_{uuid.uuid4().hex[:8]}",
                                 capability_id=artifact.id,
-                                version=artifact.version,
-                                outcome_code=outcome_match.code,
-                                outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
-                                execution_time_ms=round(total_duration, 2),
-                                steps_executed=len(step_logs),
-                                step_logs=step_logs,
-                                data=None,
+                                step_id=step.step_id,
+                                reason=outcome_match.description
+                                or f"Triggered security outcome: {outcome_match.code}",
+                                current_url=page.url if page else None,
                             )
-                        )
+                            intervention = await self.escalation_manager.request_intervention(
+                                page, req
+                            )
+                            interventions.append(intervention)
+                            if intervention.resolution == "ABORTED":
+                                total_duration = (time.perf_counter() - start_time) * 1000.0
+                                return self._sanitize_result(
+                                    ExecutionResult(
+                                        status=ExecutionStatus.HARD_FAILURE,
+                                        capability_id=artifact.id,
+                                        version=artifact.version,
+                                        outcome_code="OPERATOR_ABORTED",
+                                        outcome_message=f"Operator aborted intervention for {outcome_match.code}",
+                                        execution_time_ms=round(total_duration, 2),
+                                        steps_executed=len(step_logs),
+                                        step_logs=step_logs,
+                                        interventions=interventions,
+                                    )
+                                )
+                            elif intervention.resolution in ("RESUMED", "OVERRIDDEN"):
+                                # Re-observe terminal state after operator intervention
+                                obs_status, outcome_match = await self._observe_terminal_state(
+                                    page=page,
+                                    checkpoint=artifact.checkpoint,
+                                    params=params,
+                                )
+                                if obs_status == "BUSINESS_OUTCOME" and outcome_match:
+                                    total_duration = (time.perf_counter() - start_time) * 1000.0
+                                    return self._sanitize_result(
+                                        ExecutionResult(
+                                            status=ExecutionStatus.BUSINESS_OUTCOME,
+                                            capability_id=artifact.id,
+                                            version=artifact.version,
+                                            outcome_code=outcome_match.code,
+                                            outcome_message=outcome_match.description
+                                            or f"Matched business outcome: {outcome_match.code}",
+                                            execution_time_ms=round(total_duration, 2),
+                                            steps_executed=len(step_logs),
+                                            step_logs=step_logs,
+                                            interventions=interventions,
+                                            data=None,
+                                        )
+                                    )
+                                elif obs_status != "SUCCESS":
+                                    evidence_img, evidence_html = (
+                                        await self._capture_failure_artifacts(
+                                            page, artifact.id, f"{step.step_id}_post_escalation"
+                                        )
+                                    )
+                                    total_duration = (time.perf_counter() - start_time) * 1000.0
+                                    return self._sanitize_result(
+                                        ExecutionResult(
+                                            status=ExecutionStatus.HARD_FAILURE,
+                                            capability_id=artifact.id,
+                                            version=artifact.version,
+                                            outcome_code="CHECKPOINT_FAILED",
+                                            outcome_message=(
+                                                f"Success condition '{artifact.checkpoint.success_condition.type}' "
+                                                f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied after escalation."
+                                            ),
+                                            execution_time_ms=round(total_duration, 2),
+                                            steps_executed=len(step_logs),
+                                            step_logs=step_logs,
+                                            interventions=interventions,
+                                            evidence_path=evidence_img,
+                                        )
+                                    )
+                        else:
+                            total_duration = (time.perf_counter() - start_time) * 1000.0
+                            return self._sanitize_result(
+                                ExecutionResult(
+                                    status=ExecutionStatus.BUSINESS_OUTCOME,
+                                    capability_id=artifact.id,
+                                    version=artifact.version,
+                                    outcome_code=outcome_match.code,
+                                    outcome_message=outcome_match.description
+                                    or f"Matched business outcome: {outcome_match.code}",
+                                    execution_time_ms=round(total_duration, 2),
+                                    steps_executed=len(step_logs),
+                                    step_logs=step_logs,
+                                    interventions=interventions,
+                                    data=None,
+                                )
+                            )
                     elif obs_status != "SUCCESS":
                         evidence_img, evidence_html = await self._capture_failure_artifacts(
                             page, artifact.id, f"{step.step_id}_pre_extract"
@@ -140,6 +234,7 @@ class ReplayExecutor:
                                 execution_time_ms=round(total_duration, 2),
                                 steps_executed=len(step_logs),
                                 step_logs=step_logs,
+                                interventions=interventions,
                                 evidence_path=evidence_img,
                                 debug_context={
                                     "html_snapshot": evidence_html,
@@ -155,40 +250,99 @@ class ReplayExecutor:
                     allow_irreversible=self.allow_irreversible,
                 )
                 if not can_proceed:
-                    evidence_img, evidence_html = await self._capture_failure_artifacts(
-                        page, artifact.id, step.step_id
-                    )
-                    step_logs.append(
-                        StepLog(
-                            step_id=step.step_id,
-                            action=step.action.value,
-                            status="FAILED",
-                            error_message=block_reason or "Action blocked by irreversible action policy gate",
-                        )
-                    )
-                    total_duration = (time.perf_counter() - start_time) * 1000.0
-                    return self._sanitize_result(
-                        ExecutionResult(
-                            status=ExecutionStatus.HARD_FAILURE,
+                    if (
+                        self.policy.irreversible_policy == IrreversiblePolicy.ROUTE_TO_HUMAN
+                        and self.escalation_manager
+                    ):
+                        req = InterventionRequest(
+                            request_id=f"esc_{uuid.uuid4().hex[:8]}",
                             capability_id=artifact.id,
-                            version=artifact.version,
-                            outcome_code="IRREVERSIBLE_ACTION_BLOCKED",
-                            outcome_message=block_reason or (
-                                f"Step {step.step_id} ({step.action.value}) is marked irreversible and "
-                                "requires explicit authorization (allow_irreversible=True)."
-                            ),
-                            execution_time_ms=round(total_duration, 2),
-                            steps_executed=len(step_logs),
-                            step_logs=step_logs,
-                            evidence_path=evidence_img,
-                            debug_context={
-                                "html_snapshot": evidence_html,
-                                "step_id": step.step_id,
-                                "action": step.action.value,
-                                "url": page.url,
-                            },
+                            step_id=step.step_id,
+                            reason=block_reason
+                            or f"Step {step.step_id} ({step.action.value}) is marked irreversible and requires human clearance.",
+                            current_url=page.url if page else None,
                         )
-                    )
+                        intervention = await self.escalation_manager.request_intervention(
+                            page, req
+                        )
+                        interventions.append(intervention)
+                        if intervention.resolution == "ABORTED":
+                            evidence_img, evidence_html = await self._capture_failure_artifacts(
+                                page, artifact.id, step.step_id
+                            )
+                            step_logs.append(
+                                StepLog(
+                                    step_id=step.step_id,
+                                    action=step.action.value,
+                                    status="FAILED",
+                                    error_message="Irreversible action aborted by operator",
+                                )
+                            )
+                            total_duration = (time.perf_counter() - start_time) * 1000.0
+                            return self._sanitize_result(
+                                ExecutionResult(
+                                    status=ExecutionStatus.HARD_FAILURE,
+                                    capability_id=artifact.id,
+                                    version=artifact.version,
+                                    outcome_code="OPERATOR_ABORTED",
+                                    outcome_message=f"Operator aborted execution on irreversible step {step.step_id}",
+                                    execution_time_ms=round(total_duration, 2),
+                                    steps_executed=len(step_logs),
+                                    step_logs=step_logs,
+                                    interventions=interventions,
+                                    evidence_path=evidence_img,
+                                )
+                            )
+                        elif intervention.resolution == "OVERRIDDEN":
+                            step_logs.append(
+                                StepLog(
+                                    step_id=step.step_id,
+                                    action=step.action.value,
+                                    status="OK",
+                                    duration_ms=0.0,
+                                    error_message="Overridden by operator",
+                                )
+                            )
+                            continue
+                        # If "RESUMED", operator authorized irreversible step; proceed to dispatch
+                    else:
+                        evidence_img, evidence_html = await self._capture_failure_artifacts(
+                            page, artifact.id, step.step_id
+                        )
+                        step_logs.append(
+                            StepLog(
+                                step_id=step.step_id,
+                                action=step.action.value,
+                                status="FAILED",
+                                error_message=block_reason
+                                or "Action blocked by irreversible action policy gate",
+                            )
+                        )
+                        total_duration = (time.perf_counter() - start_time) * 1000.0
+                        return self._sanitize_result(
+                            ExecutionResult(
+                                status=ExecutionStatus.HARD_FAILURE,
+                                capability_id=artifact.id,
+                                version=artifact.version,
+                                outcome_code="IRREVERSIBLE_ACTION_BLOCKED",
+                                outcome_message=block_reason
+                                or (
+                                    f"Step {step.step_id} ({step.action.value}) is marked irreversible and "
+                                    "requires explicit authorization (allow_irreversible=True)."
+                                ),
+                                execution_time_ms=round(total_duration, 2),
+                                steps_executed=len(step_logs),
+                                step_logs=step_logs,
+                                interventions=interventions,
+                                evidence_path=evidence_img,
+                                debug_context={
+                                    "html_snapshot": evidence_html,
+                                    "step_id": step.step_id,
+                                    "action": step.action.value,
+                                    "url": page.url,
+                                },
+                            )
+                        )
 
                 step_start = time.perf_counter()
                 try:
@@ -202,6 +356,51 @@ class ReplayExecutor:
                     step_log.duration_ms = round((time.perf_counter() - step_start) * 1000.0, 2)
                     step_logs.append(step_log)
                 except Exception as step_err:
+                    if self.escalation_manager and self.escalate_on_failure:
+                        req = InterventionRequest(
+                            request_id=f"esc_{uuid.uuid4().hex[:8]}",
+                            capability_id=artifact.id,
+                            step_id=step.step_id,
+                            reason=f"Step {step.step_id} failed: {step_err}",
+                            current_url=page.url if page else None,
+                        )
+                        intervention = await self.escalation_manager.request_intervention(
+                            page, req
+                        )
+                        interventions.append(intervention)
+                        if intervention.resolution == "OVERRIDDEN":
+                            step_logs.append(
+                                StepLog(
+                                    step_id=step.step_id,
+                                    action=step.action.value,
+                                    status="OK",
+                                    duration_ms=round(
+                                        (time.perf_counter() - step_start) * 1000.0, 2
+                                    ),
+                                    error_message="Step overridden by operator",
+                                )
+                            )
+                            continue
+                        elif intervention.resolution == "RESUMED":
+                            try:
+                                retry_start = time.perf_counter()
+                                step_log = await self._dispatch_step(
+                                    page=page,
+                                    step=step,
+                                    artifact=artifact,
+                                    params=params,
+                                    extracted_data=extracted_data,
+                                )
+                                step_log.duration_ms = round(
+                                    (time.perf_counter() - retry_start) * 1000.0, 2
+                                )
+                                step_logs.append(step_log)
+                                continue
+                            except Exception as retry_err:
+                                step_err = retry_err
+                        elif intervention.resolution == "ABORTED":
+                            step_err = Exception("Operator aborted intervention")
+
                     step_duration = round((time.perf_counter() - step_start) * 1000.0, 2)
                     step_logs.append(
                         StepLog(
@@ -217,6 +416,8 @@ class ReplayExecutor:
                         outcome_code = "DOMAIN_NOT_ALLOWED"
                     elif isinstance(step_err, ActionViolationError):
                         outcome_code = "ACTION_NOT_ALLOWED"
+                    elif "Operator aborted intervention" in str(step_err):
+                        outcome_code = "OPERATOR_ABORTED"
 
                     evidence_img, evidence_html = await self._capture_failure_artifacts(
                         page, artifact.id, step.step_id
@@ -232,6 +433,7 @@ class ReplayExecutor:
                             execution_time_ms=round(total_duration, 2),
                             steps_executed=len(step_logs),
                             step_logs=step_logs,
+                            interventions=interventions,
                             evidence_path=evidence_img,
                             debug_context={
                                 "html_snapshot": evidence_html,
@@ -256,6 +458,7 @@ class ReplayExecutor:
                         execution_time_ms=round(total_duration, 2),
                         steps_executed=len(step_logs),
                         step_logs=step_logs,
+                        interventions=interventions,
                     )
                 )
 
@@ -269,16 +472,103 @@ class ReplayExecutor:
             total_duration = (time.perf_counter() - start_time) * 1000.0
 
             if observation_status == "BUSINESS_OUTCOME" and outcome_match:
+                if self.escalation_manager and outcome_match.code in self.escalation_codes:
+                    req = InterventionRequest(
+                        request_id=f"esc_{uuid.uuid4().hex[:8]}",
+                        capability_id=artifact.id,
+                        step_id=artifact.steps[-1].step_id if artifact.steps else None,
+                        reason=outcome_match.description
+                        or f"Triggered security outcome: {outcome_match.code}",
+                        current_url=page.url if page else None,
+                    )
+                    intervention = await self.escalation_manager.request_intervention(page, req)
+                    interventions.append(intervention)
+                    if intervention.resolution == "ABORTED":
+                        return self._sanitize_result(
+                            ExecutionResult(
+                                status=ExecutionStatus.HARD_FAILURE,
+                                capability_id=artifact.id,
+                                version=artifact.version,
+                                outcome_code="OPERATOR_ABORTED",
+                                outcome_message=f"Operator aborted intervention for {outcome_match.code}",
+                                execution_time_ms=round(total_duration, 2),
+                                steps_executed=len(step_logs),
+                                step_logs=step_logs,
+                                interventions=interventions,
+                            )
+                        )
+                    elif intervention.resolution in ("RESUMED", "OVERRIDDEN"):
+                        obs_status, outcome_match = await self._observe_terminal_state(
+                            page=page,
+                            checkpoint=artifact.checkpoint,
+                            params=params,
+                        )
+                        if obs_status == "SUCCESS":
+                            return self._sanitize_result(
+                                ExecutionResult(
+                                    status=ExecutionStatus.SUCCESS,
+                                    capability_id=artifact.id,
+                                    version=artifact.version,
+                                    data=extracted_data if extracted_data else None,
+                                    outcome_code="SUCCESS",
+                                    outcome_message="Execution completed and success checkpoint verified",
+                                    execution_time_ms=round(total_duration, 2),
+                                    steps_executed=len(step_logs),
+                                    step_logs=step_logs,
+                                    interventions=interventions,
+                                )
+                            )
+                        elif obs_status == "BUSINESS_OUTCOME" and outcome_match:
+                            return self._sanitize_result(
+                                ExecutionResult(
+                                    status=ExecutionStatus.BUSINESS_OUTCOME,
+                                    capability_id=artifact.id,
+                                    version=artifact.version,
+                                    outcome_code=outcome_match.code,
+                                    outcome_message=outcome_match.description
+                                    or f"Matched business outcome: {outcome_match.code}",
+                                    execution_time_ms=round(total_duration, 2),
+                                    steps_executed=len(step_logs),
+                                    step_logs=step_logs,
+                                    interventions=interventions,
+                                    data=None,
+                                )
+                            )
+                        else:
+                            evidence_img, evidence_html = (
+                                await self._capture_failure_artifacts(
+                                    page, artifact.id, "post_escalation_checkpoint"
+                                )
+                            )
+                            return self._sanitize_result(
+                                ExecutionResult(
+                                    status=ExecutionStatus.HARD_FAILURE,
+                                    capability_id=artifact.id,
+                                    version=artifact.version,
+                                    outcome_code="CHECKPOINT_FAILED",
+                                    outcome_message=(
+                                        f"Success condition '{artifact.checkpoint.success_condition.type}' "
+                                        f"targeting '{artifact.checkpoint.success_condition.target}' was not satisfied after escalation."
+                                    ),
+                                    execution_time_ms=round(total_duration, 2),
+                                    steps_executed=len(step_logs),
+                                    step_logs=step_logs,
+                                    interventions=interventions,
+                                    evidence_path=evidence_img,
+                                )
+                            )
                 return self._sanitize_result(
                     ExecutionResult(
                         status=ExecutionStatus.BUSINESS_OUTCOME,
                         capability_id=artifact.id,
                         version=artifact.version,
                         outcome_code=outcome_match.code,
-                        outcome_message=outcome_match.description or f"Matched business outcome: {outcome_match.code}",
+                        outcome_message=outcome_match.description
+                        or f"Matched business outcome: {outcome_match.code}",
                         execution_time_ms=round(total_duration, 2),
                         steps_executed=len(step_logs),
                         step_logs=step_logs,
+                        interventions=interventions,
                         data=None,
                     )
                 )
@@ -295,6 +585,7 @@ class ReplayExecutor:
                         execution_time_ms=round(total_duration, 2),
                         steps_executed=len(step_logs),
                         step_logs=step_logs,
+                        interventions=interventions,
                     )
                 )
 
@@ -315,6 +606,7 @@ class ReplayExecutor:
                     execution_time_ms=round(total_duration, 2),
                     steps_executed=len(step_logs),
                     step_logs=step_logs,
+                    interventions=interventions,
                     evidence_path=evidence_img,
                     debug_context={
                         "html_snapshot": evidence_html,
@@ -675,4 +967,13 @@ class ReplayExecutor:
                 log.extracted_data = self.redactor.redact_dict(log.extracted_data)
             if log.error_message:
                 log.error_message = self.redactor.redact_text(log.error_message)
+        for intervention in result.interventions:
+            intervention.reason = self.redactor.redact_text(intervention.reason)
+            for action in intervention.operator_actions:
+                if action.value:
+                    action.value = self.redactor.redact_text(action.value)
+                if action.target:
+                    action.target = self.redactor.redact_text(action.target)
+                if action.details and isinstance(action.details, dict):
+                    action.details = self.redactor.redact_dict(action.details)
         return result
