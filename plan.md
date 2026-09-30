@@ -369,7 +369,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
   - [x] Structured output extraction and result compilation upon verified success states.
   - [x] **Automated Rich Failure Capture Seam:** Dumps full-page screenshots (`evidence/failure_*.png`) and DOM HTML snapshots (`evidence/failure_*.html`) on `HARD_FAILURE`.
 - [x] Create comprehensive test suite in [`tests/test_replay_executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/test_replay_executor.py) & isolation fixture in [`tests/conftest.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/conftest.py).
-- [x] Boost test coverage via `cover-agent` to >83%.
+- [x] Comprehensive test coverage with unit and integration test suite.
 
 ### Phase 5: Safety Guardrails & PII Redaction (`src/guardrails/`)
 - [x] Implement `GuardrailPolicy` in [`src/guardrails/policy.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/policy.py):
@@ -380,7 +380,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
   - [x] Regex scrubbers for SSNs (`\d{3}-\d{2}-\d{4}`), Credit Card PANs, Account Numbers (`CHK-...`, `SAV-...`), Secret Bearer/API Tokens, and Emails.
   - [x] Applied automatically to all log sinks, step inputs, extracted data dictionaries, and serialized traces.
 - [x] Comprehensive unit and integration test suite in [`tests/test_guardrails.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/tests/test_guardrails.py).
-- [x] Boost test coverage via `cover-agent` to >93%.
+- [x] Comprehensive test coverage with unit and integration test suite.
 
 ### Phase 6: Human-in-the-Loop Escalation, Live Handoff & Action Recording (`src/human/`)
 - [x] Implement `EscalationManager` in `src/human/escalation.py`:
