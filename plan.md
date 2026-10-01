@@ -328,7 +328,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 | **Phase 5** | Safety Guardrails & PII Redaction | `[x] COMPLETED` | [`src/guardrails/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/) (Domain allowlist, action gating, PII scrubber, 95% coverage, 14 tests) |
 | **Phase 6** | Human Escalation & Action Recording | `[x] COMPLETED` | [`src/human/escalation.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/human/escalation.py), 83% coverage, 12 tests, live DOM & Playwright action recording |
 | **Phase 7** | LLM Discovery Agent Loop & Compiler | `[x] COMPLETED` | [`src/agent/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/agent/) (`DOMInspector`, `DiscoveryAgent`, `ArtifactCompiler`, 91% coverage, 15 tests) |
-| **Phase 8** | Typer CLI & Developer Workflow | `[ ] PENDING` | `src/cli.py` (`serve-target`, `discover`, `replay`, `test-harness`) |
+| **Phase 8** | Typer CLI & Developer Workflow | `[x] COMPLETED` | [`src/cli.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/cli.py) (`serve-target`, `discover`, `replay`, `test-harness`, 85% coverage, 11 tests) |
 | **Phase 9** | End-to-End Evidence Generation | `[ ] PENDING` | Logs, screenshots, and DOM snapshots in `evidence/` |
 | **Phase 10** | Comprehensive Documentation | `[ ] PENDING` | `README.md` & `REPORT.md` (7 mandated sections) |
 
@@ -406,11 +406,11 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
   - [x] Emits validated capability JSON schemas.
 
 ### Phase 8: Typer CLI & Developer Workflow (`src/cli.py`)
-- [ ] Implement Typer CLI in `src/cli.py`:
-  - [ ] `python -m src.cli serve-target [--port 8000]`
-  - [ ] `python -m src.cli discover --goal "..." --url "..." --output ...`
-  - [ ] `python -m src.cli replay --artifact ... --params ...`
-  - [ ] `python -m src.cli test-harness`
+- [x] Implement Typer CLI in `src/cli.py`:
+  - [x] `python -m src.cli serve-target [--port 8000]`
+  - [x] `python -m src.cli discover --goal "..." --url "..." --output ...`
+  - [x] `python -m src.cli replay --artifact ... --params ...`
+  - [x] `python -m src.cli test-harness`
 
 ### Phase 9: End-to-End Evidence Generation (`evidence/`)
 - [ ] Generate `evidence/discovery_run.log`.
