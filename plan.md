@@ -327,7 +327,7 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 | **Phase 4** | Deterministic Replay Engine | `[x] COMPLETED` | [`src/engine/executor.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/engine/executor.py), 83% coverage, 24 unit/integration tests passing |
 | **Phase 5** | Safety Guardrails & PII Redaction | `[x] COMPLETED` | [`src/guardrails/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/guardrails/) (Domain allowlist, action gating, PII scrubber, 95% coverage, 14 tests) |
 | **Phase 6** | Human Escalation & Action Recording | `[x] COMPLETED` | [`src/human/escalation.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/human/escalation.py), 83% coverage, 12 tests, live DOM & Playwright action recording |
-| **Phase 7** | LLM Discovery Agent Loop & Compiler | `[ ] PENDING` | `src/agent/inspector.py`, `src/agent/discovery.py`, `src/agent/compiler.py` |
+| **Phase 7** | LLM Discovery Agent Loop & Compiler | `[x] COMPLETED` | [`src/agent/`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/agent/) (`DOMInspector`, `DiscoveryAgent`, `ArtifactCompiler`, 91% coverage, 15 tests) |
 | **Phase 8** | Typer CLI & Developer Workflow | `[ ] PENDING` | `src/cli.py` (`serve-target`, `discover`, `replay`, `test-harness`) |
 | **Phase 9** | End-to-End Evidence Generation | `[ ] PENDING` | Logs, screenshots, and DOM snapshots in `evidence/` |
 | **Phase 10** | Comprehensive Documentation | `[ ] PENDING` | `README.md` & `REPORT.md` (7 mandated sections) |
@@ -393,17 +393,17 @@ To guarantee reproducible, safe, and zero-external-dependency execution, we buil
 - [x] Integration tests demonstrating seamless handoff and operator action recording.
 
 ### Phase 7: LLM Discovery Agent Loop & Compiler Seam (`src/agent/`)
-- [ ] Implement `DOMInspector` in `src/agent/inspector.py`:
-  - [ ] Injected Playwright introspection utility for live `ElementHandle` resolution.
-  - [ ] Programmatically derives and validates a verified 4-tier locator hierarchy (Role &rarr; Label/Text &rarr; Scoped CSS &rarr; Stable XPath) with frame boundary detection.
-- [ ] Implement `DiscoveryAgent` in `src/agent/discovery.py`:
-  - [ ] Compact accessibility tree and interactive element map extraction.
-  - [ ] Tool calling interface (`navigate`, `click`, `fill`, `extract`, `finish_task`, `request_human_help`).
-  - [ ] Live execution interception binding verified `LocatorStrategy` to recorded steps.
-- [ ] Implement `ArtifactCompiler` in `src/agent/compiler.py`:
-  - [ ] Normalizes trajectory into valid `CapabilityArtifact`.
-  - [ ] Parameterizes inputs (`12345` &rarr; `{{member_id}}`).
-  - [ ] Emits validated capability JSON schemas.
+- [x] Implement `DOMInspector` in [`src/agent/inspector.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/agent/inspector.py):
+  - [x] Injected Playwright introspection utility for live `ElementHandle` resolution.
+  - [x] Programmatically derives and validates a verified 4-tier locator hierarchy (Role &rarr; Label/Text &rarr; Scoped CSS &rarr; Stable XPath) with frame boundary detection.
+- [x] Implement `DiscoveryAgent` in [`src/agent/discovery.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/agent/discovery.py):
+  - [x] Compact accessibility tree and interactive element map extraction.
+  - [x] Tool calling interface (`navigate`, `click`, `fill`, `extract`, `finish_goal`).
+  - [x] Live execution interception binding verified `LocatorStrategy` to recorded steps.
+- [x] Implement `ArtifactCompiler` in [`src/agent/compiler.py`](file:///Users/chaitralibrahme/Desktop/Projects/Interface%20AI%20Project/src/agent/compiler.py):
+  - [x] Normalizes trajectory into valid `CapabilityArtifact`.
+  - [x] Parameterizes inputs (`12345` &rarr; `{{member_id}}`).
+  - [x] Emits validated capability JSON schemas.
 
 ### Phase 8: Typer CLI & Developer Workflow (`src/cli.py`)
 - [ ] Implement Typer CLI in `src/cli.py`:

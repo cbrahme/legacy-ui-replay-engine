@@ -797,37 +797,41 @@ class ReplayExecutor:
     def _build_playwright_locator(self, root, locator_str: str) -> Locator:
         """
         Parses specialized locator prefixes or delegates directly to Playwright locator engine:
-        - role:<role>[name='<name>']
+        - role:<role>[name='<name>'] or role:<role>[name="<name>"]
         - label:<text>
         - text:<text>
         - css:<selector>
         - xpath:<selector>
         """
-        loc_str = locator_str.strip()
+        s = locator_str.strip()
 
-        # Role pattern: role:button[name='Search'] or role:textbox[name='Member ID']
-        role_match = re.match(r"^role:([a-zA-Z]+)(?:\[name=['\"](.*?)['\"]\])?$", loc_str)
+        # Matches role:tag or role:tag[name="..."] / role:tag[name='...']
+        # \2 ensures the closing quote matches the opening quote
+        role_match = re.match(r"^role:([a-zA-Z]+)(?:\[name=(['\"])([\s\S]*?)\2\])?$", s)
         if role_match:
             role = role_match.group(1)
-            name = role_match.group(2)
+            name = role_match.group(3)
             if name:
-                return root.get_by_role(role, name=name)
+                clean_name = name.replace('\\"', '"').replace("\\'", "'")
+                return root.get_by_role(role, name=clean_name)
             return root.get_by_role(role)
 
-        if loc_str.startswith("label:"):
-            return root.get_by_label(loc_str[6:].strip())
+        if s.startswith("text:"):
+            raw_text = s[5:].strip().replace('\\"', '"').replace("\\'", "'")
+            return root.get_by_text(raw_text)
 
-        if loc_str.startswith("text:"):
-            return root.get_by_text(loc_str[5:].strip())
+        if s.startswith("label:"):
+            raw_label = s[6:].strip().replace('\\"', '"').replace("\\'", "'")
+            return root.get_by_label(raw_label)
 
-        if loc_str.startswith("css:"):
-            return root.locator(loc_str[4:].strip())
+        if s.startswith("css:"):
+            return root.locator(s[4:].strip())
 
-        if loc_str.startswith("xpath:"):
-            return root.locator(f"xpath={loc_str[6:].strip()}")
+        if s.startswith("xpath:"):
+            return root.locator(f"xpath={s[6:].strip()}")
 
         # Standard CSS / XPath / text locator supported directly by Playwright
-        return root.locator(loc_str)
+        return root.locator(s)
 
     async def _observe_terminal_state(
         self,
