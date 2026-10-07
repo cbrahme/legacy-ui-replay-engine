@@ -1,0 +1,96 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: REPLAY HAPPY PATH EVIDENCE LOG
+================================================================================
+Capability:       Member Savings Balance Lookup (member_balance_lookup v1.0.0)
+Status:           SUCCESS
+Outcome Code:     SUCCESS
+Outcome Message:  Execution completed and success checkpoint verified
+Execution Time:   725.35 ms
+Steps Executed:   4 / 4
+PII Redaction:    ACTIVE (All SSNs, account numbers, and tokens redacted)
+================================================================================
+
+--------------------------------------------------------------------------------
+CONTEXT & SCENARIO DESCRIPTION
+--------------------------------------------------------------------------------
+Deterministic zero-LLM replay querying active credit union member 12345.
+Verifies successful form navigation, input typing, search click, and savings balance extraction.
+
+--------------------------------------------------------------------------------
+STEP EXECUTION TRACE
+--------------------------------------------------------------------------------
+Step   | Action         | Status   | Duration (ms)  | Target / Resolved Locator
+-------------------------------------------------------------------------------
+1      | navigate       | OK       |         24.57 | navigation_url
+2      | fill           | OK       |         58.21 | primary:role:textbox[name='Member Search ID']
+3      | click          | OK       |         61.36 | primary:role:button[name='Search Records']
+4      | extract        | OK       |          8.66 | primary:#savings-balance-val
+       └── Extracted: {'savings_balance': '$4,250.75'}
+
+--------------------------------------------------------------------------------
+EXTRACTED OUTPUT DATA
+--------------------------------------------------------------------------------
+  savings_balance: $4,250.75
+
+--------------------------------------------------------------------------------
+SERIALIZED EXECUTION RESULT (JSON)
+--------------------------------------------------------------------------------
+{
+  "status": "SUCCESS",
+  "capability_id": "member_balance_lookup",
+  "version": "1.0.0",
+  "data": {
+    "savings_balance": "$4,250.75"
+  },
+  "outcome_code": "SUCCESS",
+  "outcome_message": "Execution completed and success checkpoint verified",
+  "execution_time_ms": 725.35,
+  "steps_executed": 4,
+  "step_logs": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "status": "OK",
+      "duration_ms": 24.57,
+      "target_resolved": "navigation_url",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "status": "OK",
+      "duration_ms": 58.21,
+      "target_resolved": "primary:role:textbox[name='Member Search ID']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "OK",
+      "duration_ms": 61.36,
+      "target_resolved": "primary:role:button[name='Search Records']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 4,
+      "action": "extract",
+      "status": "OK",
+      "duration_ms": 8.66,
+      "target_resolved": "primary:#savings-balance-val",
+      "extracted_data": {
+        "savings_balance": "$4,250.75"
+      },
+      "error_message": null
+    }
+  ],
+  "interventions": [],
+  "evidence_path": null,
+  "debug_context": null
+}
+
+================================================================================
+END OF REPLAY HAPPY PATH EVIDENCE LOG
+================================================================================

@@ -1,0 +1,150 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: REPLAY HUMAN ESCALATION & LIVE ACTION RECORDING EVIDENCE LOG
+================================================================================
+Capability:       Member Savings Balance Lookup (member_balance_lookup v1.0.0)
+Status:           SUCCESS
+Outcome Code:     SUCCESS
+Outcome Message:  Execution completed and success checkpoint verified
+Execution Time:   1337.71 ms
+Steps Executed:   4 / 4
+PII Redaction:    ACTIVE (All SSNs, account numbers, and tokens redacted)
+================================================================================
+
+--------------------------------------------------------------------------------
+CONTEXT & SCENARIO DESCRIPTION
+--------------------------------------------------------------------------------
+Replay querying member 67890 under security/fraud hold.
+Multi-Condition State Observer detects FRAUD_HOLD security lockout banner.
+Engine pauses automation without killing the browser session and routes an InterventionRequest.
+EscalationManager captures escalation_before_*.png, attaches Playwright lifecycle & DOM listeners,
+records supervisor override click, and captures escalation_after_*.png upon resumption.
+Replay executor verifies security clearance, proceeds to extraction, and completes successfully.
+
+--------------------------------------------------------------------------------
+STEP EXECUTION TRACE
+--------------------------------------------------------------------------------
+Step   | Action         | Status   | Duration (ms)  | Target / Resolved Locator
+-------------------------------------------------------------------------------
+1      | navigate       | OK       |         16.56 | navigation_url
+2      | fill           | OK       |         23.69 | primary:role:textbox[name='Member Search ID']
+3      | click          | OK       |         43.92 | primary:role:button[name='Search Records']
+4      | extract        | OK       |          8.64 | primary:#savings-balance-val
+       └── Extracted: {'savings_balance': '$5,400.00'}
+
+--------------------------------------------------------------------------------
+EXTRACTED OUTPUT DATA
+--------------------------------------------------------------------------------
+  savings_balance: $5,400.00
+
+--------------------------------------------------------------------------------
+HUMAN ESCALATION & OPERATOR AUDIT TRAIL
+--------------------------------------------------------------------------------
+[Intervention #1] Request ID: esc_92df3e90
+  Trigger Step:      Step 4
+  Reason:            Account is locked under fraud investigation
+  Resolution:        RESUMED
+  Duration:          1.01 s
+  Screenshot Before: evidence/escalation_before_esc_92df3e90.png
+  Screenshot After:  evidence/escalation_after_esc_92df3e90.png
+  Operator Actions Recorded (2 live events):
+    - [CLICK] | Target: button#supervisor-override-btn (text: "Authorize Supervisor Override")
+    - [NAVIGATION] | Target: http://127.0.0.1:8000/members/67890
+
+--------------------------------------------------------------------------------
+SERIALIZED EXECUTION RESULT (JSON)
+--------------------------------------------------------------------------------
+{
+  "status": "SUCCESS",
+  "capability_id": "member_balance_lookup",
+  "version": "1.0.0",
+  "data": {
+    "savings_balance": "$5,400.00"
+  },
+  "outcome_code": "SUCCESS",
+  "outcome_message": "Execution completed and success checkpoint verified",
+  "execution_time_ms": 1337.71,
+  "steps_executed": 4,
+  "step_logs": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "status": "OK",
+      "duration_ms": 16.56,
+      "target_resolved": "navigation_url",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "status": "OK",
+      "duration_ms": 23.69,
+      "target_resolved": "primary:role:textbox[name='Member Search ID']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "OK",
+      "duration_ms": 43.92,
+      "target_resolved": "primary:role:button[name='Search Records']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 4,
+      "action": "extract",
+      "status": "OK",
+      "duration_ms": 8.64,
+      "target_resolved": "primary:#savings-balance-val",
+      "extracted_data": {
+        "savings_balance": "$5,400.00"
+      },
+      "error_message": null
+    }
+  ],
+  "interventions": [
+    {
+      "request_id": "esc_92df3e90",
+      "trigger_step_id": 4,
+      "reason": "Account is locked under fraud investigation",
+      "screenshot_before": "evidence/escalation_before_esc_92df3e90.png",
+      "screenshot_after": "evidence/escalation_after_esc_92df3e90.png",
+      "operator_actions": [
+        {
+          "timestamp": "2026-10-07T18:32:25.420018Z",
+          "action_type": "click",
+          "target": "button#supervisor-override-btn (text: \"Authorize Supervisor Override\")",
+          "value": null,
+          "details": {
+            "tagName": "BUTTON",
+            "id": "supervisor-override-btn",
+            "name": null,
+            "type": "submit",
+            "clientX": 219,
+            "clientY": 320
+          }
+        },
+        {
+          "timestamp": "2026-10-07T18:32:25.435107Z",
+          "action_type": "navigation",
+          "target": "http://127.0.0.1:8000/members/67890",
+          "value": null,
+          "details": {
+            "url": "http://127.0.0.1:8000/members/67890",
+            "name": ""
+          }
+        }
+      ],
+      "resolution": "RESUMED",
+      "duration_seconds": 1.01
+    }
+  ],
+  "evidence_path": null,
+  "debug_context": null
+}
+
+================================================================================
+END OF REPLAY HUMAN ESCALATION & LIVE ACTION RECORDING EVIDENCE LOG
+================================================================================

@@ -1,0 +1,234 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: LLM DISCOVERY RUN EVIDENCE LOG
+================================================================================
+Timestamp (UTC): 2026-10-06T23:14:52.335814+00:00
+Completed (UTC): 2026-10-06T23:14:58.518125+00:00 (Duration: 6.18s)
+Target Surface:  http://127.0.0.1:8000/members
+Goal:            Look up member 12345 and read their current savings balance
+LLM Provider:    OpenAI (model: gpt-4o, temperature: 0.0)
+Agent Engine:    src.agent.discovery.DiscoveryAgent (with live DOMInspector)
+PII Redactor:    src.guardrails.redactor.PIIRedactor (active)
+Execution Status:SUCCESS
+================================================================================
+
+--------------------------------------------------------------------------------
+1. INITIAL DISCOVERY OBSERVATION & APPLICATION STATE
+--------------------------------------------------------------------------------
+Starting URL:     http://127.0.0.1:8000/members
+Navigation State: DOMContentLoaded, NetworkIdle
+Recorded Step 1:  navigate -> http://127.0.0.1:8000/members [STATUS: OK]
+
+--------------------------------------------------------------------------------
+2. INTERACTIVE DOM / ACCESSIBILITY TREE INSPECTION
+--------------------------------------------------------------------------------
+DOMInspector resolved initial interactive controls on live page:
+  - [] tag=<a> name='' id='nav-dashboard' selector='' text='Home / Dashboard'
+  - [] tag=<a> name='' id='nav-members' selector='' text='Member Search & Servicing'
+  - [] tag=<a> name='' id='nav-transfers' selector='' text='Funds Transfer'
+  - [] tag=<a> name='' id='nav-admin' selector='' text='System Admin'
+  - [] tag=<input> name='member_id' id='member_id' selector='' text=''
+  - [] tag=<button> name='' id='search-button' selector='' text='Search Records'
+  - [] tag=<a> name='' id='' selector='' text='Clear Form'
+
+--------------------------------------------------------------------------------
+3. TURN-BY-TURN AGENT DECISION & EXECUTION TRAJECTORY
+--------------------------------------------------------------------------------
+[TURN 1] Agent Decision -> Tool: fill
+    Arg [selector]: #member_id
+    Arg [value]: 12345
+    Arg [param_name]: member_id
+    Arg [rationale]: Enter the member ID to search for the member's account.
+    Execution Result: status=OK
+    DOMInspector Primary Locator: role:textbox[name='Member Search ID']
+    Observed / Handled Value:   12345
+
+[TURN 2] Agent Decision -> Tool: click
+    Arg [selector]: #search-button
+    Arg [rationale]: Click the search button to look up the member with ID 12345.
+    Execution Result: status=OK
+    DOMInspector Primary Locator: role:button[name='Search Records']
+
+[TURN 3] Agent Decision -> Tool: extract
+    Arg [selector]: #accounts-table
+    Arg [field_name]: savings_balance
+    Arg [rationale]: Extract the savings balance from the accounts table for member 12345.
+    Execution Result: status=OK
+    Observed / Handled Value:   Account Type	Account Number	Available Balance	Current Ledger Balance	Status
+Standard Checking	[REDACTED_ACCOUNT]	$1,120.50	$1,120.50	ACTIVE
+Regular Share Savings	[REDACTED_ACCOUNT]	$4,250.75	$4,250.75	ACTIVE
+Money Market Premium	[REDACTED_ACCOUNT]	$15,000.00	$15,000.00	ACTIVE
+
+[TURN 4] Agent Decision -> Tool: finish_goal
+    Arg [success_selector]: #accounts-table
+    Arg [business_outcomes]: [{'code': 'savings_balance', 'target': 'Regular Share Savings', 'pattern': '\\$4,250.75', 'description': "The current savings balance for the member's Regular Share Savings account."}]
+    Arg [summary]: Successfully looked up member 12345 and extracted the current savings balance of $4,250.75 from the Regular Share Savings account.
+    Execution Result: status=SUCCESS
+
+--------------------------------------------------------------------------------
+4. DOM INSPECTOR MULTI-TIER LOCATOR RESOLUTION
+--------------------------------------------------------------------------------
+For each interactive step, the live DOMInspector derived the resilient 4-tier locator hierarchy:
+Step 2 (fill):
+  Primary (Tier 1 - Role/Name): role:textbox[name='Member Search ID']
+  Fallbacks (Tiers 2-4):
+    -> #member_id
+    -> input[name='member_id']
+    -> //*[@id='member_id']
+  Rationale: [Enter the member ID to search for the member's account.] Primary uses accessible role 'textbox' and name 'Member Search ID'
+
+Step 3 (click):
+  Primary (Tier 1 - Role/Name): role:button[name='Search Records']
+  Fallbacks (Tiers 2-4):
+    -> text:Search Records
+    -> #search-button
+    -> button.btn
+    -> //*[@id='search-button']
+    -> //button[contains(text(), 'Search Records')]
+  Rationale: [Click the search button to look up the member with ID 12345.] Primary uses accessible role 'button' and name 'Search Records'
+
+Step 4 (extract):
+  Primary (Tier 1 - Role/Name): role:table
+  Fallbacks (Tiers 2-4):
+    -> #accounts-table
+    -> table.legacy-table
+    -> //*[@id='accounts-table']
+  Rationale: [Extract the savings balance from the accounts table for member 12345.] Primary uses accessible role 'table'
+
+--------------------------------------------------------------------------------
+5. TERMINAL CHECKPOINT & OUTCOME DECLARATIONS
+--------------------------------------------------------------------------------
+Success Condition Type:   element_visible
+Success Condition Target: #accounts-table
+Declared Business Outcomes (1 mapped):
+  - Code: savings_balance | Pattern: '\$4,250.75' | Target: Regular Share Savings
+
+--------------------------------------------------------------------------------
+6. EXTRACTED DATA (PII-REDACTED)
+--------------------------------------------------------------------------------
+savings_balance:
+    Account Type	Account Number	Available Balance	Current Ledger Balance	Status
+    Standard Checking	[REDACTED_ACCOUNT]	$1,120.50	$1,120.50	ACTIVE
+    Regular Share Savings	[REDACTED_ACCOUNT]	$4,250.75	$4,250.75	ACTIVE
+    Money Market Premium	[REDACTED_ACCOUNT]	$15,000.00	$15,000.00	ACTIVE
+
+--------------------------------------------------------------------------------
+7. COMPILED REUSABLE CAPABILITY ARTIFACT (JSON SCHEMA)
+--------------------------------------------------------------------------------
+{
+  "id": "member_balance_lookup",
+  "name": "Member Savings Balance Lookup",
+  "version": "1.0.0",
+  "description": "Look up member 12345 and read their current savings balance",
+  "target_path": "/members",
+  "target_url": null,
+  "input_schema": {
+    "base_url": {
+      "type": "string",
+      "description": "Base host origin (e.g. http://127.0.0.1:8000)",
+      "default": "http://127.0.0.1:8000"
+    },
+    "member_id": {
+      "type": "string",
+      "description": "Input parameter for Member Id",
+      "example": "12345"
+    }
+  },
+  "output_schema": {
+    "savings_balance": {
+      "type": "string",
+      "description": "Extracted value for savings_balance"
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "target": null,
+      "value": "{{base_url}}/members",
+      "coordinate": null,
+      "field_name": null,
+      "is_irreversible": false,
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "target": {
+        "frame_selector": null,
+        "primary": "role:textbox[name='Member Search ID']",
+        "fallbacks": [
+          "#member_id",
+          "input[name='member_id']",
+          "//*[@id='member_id']"
+        ],
+        "rationale": "[Enter the member ID to search for the member's account.] Primary uses accessible role 'textbox' and name 'Member Search ID'"
+      },
+      "value": "{{member_id}}",
+      "coordinate": null,
+      "field_name": null,
+      "is_irreversible": false,
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "target": {
+        "frame_selector": null,
+        "primary": "role:button[name='Search Records']",
+        "fallbacks": [
+          "text:Search Records",
+          "#search-button",
+          "button.btn",
+          "//*[@id='search-button']",
+          "//button[contains(text(), 'Search Records')]"
+        ],
+        "rationale": "[Click the search button to look up the member with ID 12345.] Primary uses accessible role 'button' and name 'Search Records'"
+      },
+      "value": null,
+      "coordinate": null,
+      "field_name": null,
+      "is_irreversible": false,
+      "timeout_ms": 10000
+    },
+    {
+      "step_id": 4,
+      "action": "extract",
+      "target": {
+        "frame_selector": null,
+        "primary": "role:table",
+        "fallbacks": [
+          "#accounts-table",
+          "table.legacy-table",
+          "//*[@id='accounts-table']"
+        ],
+        "rationale": "[Extract the savings balance from the accounts table for member 12345.] Primary uses accessible role 'table'"
+      },
+      "value": null,
+      "coordinate": null,
+      "field_name": "savings_balance",
+      "is_irreversible": false,
+      "timeout_ms": 10000
+    }
+  ],
+  "checkpoint": {
+    "success_condition": {
+      "type": "element_visible",
+      "target": "#accounts-table",
+      "pattern": null,
+      "timeout_ms": 5000
+    },
+    "business_outcomes": [
+      {
+        "code": "savings_balance",
+        "match_type": "element_text_contains",
+        "target": "Regular Share Savings",
+        "pattern": "\\$4,250.75",
+        "description": "The current savings balance for the member's Regular Share Savings account."
+      }
+    ]
+  }
+}
+
+================================================================================
+END OF DISCOVERY RUN EVIDENCE
+================================================================================

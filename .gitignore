@@ -25,3 +25,6 @@ coverage.xml
 run.log
 test_results.html
 *.patch
+
+# Documentation & assignment briefs
+/docs

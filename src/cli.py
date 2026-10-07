@@ -236,6 +236,35 @@ def discover(
         )
     )
 
+    if disc_result.trajectory_log:
+        traj_table = Table(title="Discovery Trajectory Trace", show_header=True)
+        traj_table.add_column("Step", style="dim", width=6)
+        traj_table.add_column("Action", style="cyan", width=12)
+        traj_table.add_column("Target / Details", style="blue")
+        traj_table.add_column("Status", width=10)
+        for tlog in disc_result.trajectory_log:
+            step_id = str(tlog.get("step_id", "-"))
+            action = tlog.get("action", "-")
+            status = tlog.get("status", "OK")
+            s_style = "green" if status == "OK" else "red"
+            details = (
+                tlog.get("primary_target")
+                or tlog.get("url")
+                or tlog.get("success_selector")
+                or tlog.get("field_name")
+                or "-"
+            )
+            traj_table.add_row(step_id, action, details, f"[{s_style}]{status}[/{s_style}]")
+        console.print(traj_table)
+
+    if disc_result.extracted_data:
+        data_table = Table(title="Discovered Extracted Data", show_header=True)
+        data_table.add_column("Field", style="cyan", no_wrap=True)
+        data_table.add_column("Extracted Value", style="green")
+        for k, v in disc_result.extracted_data.items():
+            data_table.add_row(str(k), str(v))
+        console.print(data_table)
+
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(artifact.model_dump_json(indent=2), encoding="utf-8")

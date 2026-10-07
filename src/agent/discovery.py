@@ -173,6 +173,7 @@ class DiscoveryResult:
         extracted_data: Optional[Dict[str, Any]] = None,
         error_message: Optional[str] = None,
         trajectory_log: Optional[List[Dict[str, Any]]] = None,
+        conversation: Optional[List[Dict[str, Any]]] = None,
     ):
         self.success = success
         self.capability = capability
@@ -182,6 +183,7 @@ class DiscoveryResult:
         self.extracted_data = extracted_data or {}
         self.error_message = error_message
         self.trajectory_log = trajectory_log or []
+        self.conversation = conversation or []
 
 
 class DiscoveryAgent:
@@ -346,6 +348,7 @@ class DiscoveryAgent:
                         recorded_steps=recorded_steps,
                         error_message="LLM caller returned no tool actions to execute.",
                         trajectory_log=trajectory_log,
+                        conversation=conversation,
                     )
 
                 call_id = tool_call.get("id") or f"call_{uuid.uuid4().hex[:8]}"
@@ -570,6 +573,7 @@ class DiscoveryAgent:
                         steps_executed=0,
                         error_message="Discovery timed out without executing any actions.",
                         trajectory_log=trajectory_log,
+                        conversation=conversation,
                     )
 
             # 4. Compile CapabilityArtifact
@@ -591,6 +595,7 @@ class DiscoveryAgent:
                 recorded_steps=recorded_steps,
                 extracted_data=extracted_data,
                 trajectory_log=trajectory_log,
+                conversation=conversation,
             )
 
         except Exception as e:
@@ -601,6 +606,7 @@ class DiscoveryAgent:
                 recorded_steps=recorded_steps,
                 error_message=str(e),
                 trajectory_log=trajectory_log,
+                conversation=conversation if "conversation" in locals() else [],
             )
 
         finally:

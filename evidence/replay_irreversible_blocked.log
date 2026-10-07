@@ -1,0 +1,92 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: REPLAY IRREVERSIBLE ACTION GATED EVIDENCE LOG
+================================================================================
+Capability:       Member Funds Disbursement & Transfer (member_disbursement_transfer v1.0.0)
+Status:           HARD_FAILURE
+Outcome Code:     IRREVERSIBLE_ACTION_BLOCKED
+Outcome Message:  IRREVERSIBLE_ACTION_BLOCKED: Step is marked irreversible and unattended execution without explicit authorization (--allow-irreversible) is prohibited by policy.
+Execution Time:   288.00 ms
+Steps Executed:   3 / 4
+PII Redaction:    ACTIVE (All SSNs, account numbers, and tokens redacted)
+================================================================================
+
+--------------------------------------------------------------------------------
+CONTEXT & SCENARIO DESCRIPTION
+--------------------------------------------------------------------------------
+Replay of a capability containing a mutating step (is_irreversible: true) in headless unattended mode.
+Without explicit --allow-irreversible authorization, GuardrailPolicy immediately halts execution
+prior to dispatching the action, captures diagnostic state, and records outcome IRREVERSIBLE_ACTION_BLOCKED.
+
+--------------------------------------------------------------------------------
+STEP EXECUTION TRACE
+--------------------------------------------------------------------------------
+Step   | Action         | Status   | Duration (ms)  | Target / Resolved Locator
+-------------------------------------------------------------------------------
+1      | navigate       | OK       |         13.82 | navigation_url
+2      | fill           | OK       |         25.53 | primary:role:textbox[name='Member Search ID']
+3      | click          | FAILED   |          0.00 | -
+       └── Error: IRREVERSIBLE_ACTION_BLOCKED: Step is marked irreversible and unattended execution without explicit authorization (--allow-irreversible) is prohibited by policy.
+
+--------------------------------------------------------------------------------
+RICH FAILURE SIGNALS & DIAGNOSTIC ARTIFACTS
+--------------------------------------------------------------------------------
+  Failure Screenshot: evidence/failure_member_disbursement_transfer_step3_20261007_113228.png
+  DOM HTML Snapshot:  evidence/failure_member_disbursement_transfer_step3_20261007_113228.html
+  step_id: 3
+  action: click
+  url: http://127.0.0.1:8000/members
+
+--------------------------------------------------------------------------------
+SERIALIZED EXECUTION RESULT (JSON)
+--------------------------------------------------------------------------------
+{
+  "status": "HARD_FAILURE",
+  "capability_id": "member_disbursement_transfer",
+  "version": "1.0.0",
+  "data": null,
+  "outcome_code": "IRREVERSIBLE_ACTION_BLOCKED",
+  "outcome_message": "IRREVERSIBLE_ACTION_BLOCKED: Step is marked irreversible and unattended execution without explicit authorization (--allow-irreversible) is prohibited by policy.",
+  "execution_time_ms": 288.0,
+  "steps_executed": 3,
+  "step_logs": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "status": "OK",
+      "duration_ms": 13.82,
+      "target_resolved": "navigation_url",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "status": "OK",
+      "duration_ms": 25.53,
+      "target_resolved": "primary:role:textbox[name='Member Search ID']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "FAILED",
+      "duration_ms": 0.0,
+      "target_resolved": null,
+      "extracted_data": null,
+      "error_message": "IRREVERSIBLE_ACTION_BLOCKED: Step is marked irreversible and unattended execution without explicit authorization (--allow-irreversible) is prohibited by policy."
+    }
+  ],
+  "interventions": [],
+  "evidence_path": "evidence/failure_member_disbursement_transfer_step3_20261007_113228.png",
+  "debug_context": {
+    "html_snapshot": "evidence/failure_member_disbursement_transfer_step3_20261007_113228.html",
+    "step_id": 3,
+    "action": "click",
+    "url": "http://127.0.0.1:8000/members"
+  }
+}
+
+================================================================================
+END OF REPLAY IRREVERSIBLE ACTION GATED EVIDENCE LOG
+================================================================================

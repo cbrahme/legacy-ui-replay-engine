@@ -1,0 +1,78 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: REPLAY BUSINESS OUTCOME EVIDENCE LOG
+================================================================================
+Capability:       Member Savings Balance Lookup (member_balance_lookup v1.0.0)
+Status:           BUSINESS_OUTCOME
+Outcome Code:     MEMBER_NOT_FOUND
+Outcome Message:  Member record does not exist in core banking system
+Execution Time:   328.97 ms
+Steps Executed:   3 / 4
+PII Redaction:    ACTIVE (All SSNs, account numbers, and tokens redacted)
+================================================================================
+
+--------------------------------------------------------------------------------
+CONTEXT & SCENARIO DESCRIPTION
+--------------------------------------------------------------------------------
+Replay querying non-existent member 99999.
+Pre-Extraction Multi-Condition State Observer races success checkpoint against business outcome patterns.
+Detects .alert-warning containing 'Member record not found in system' and short-circuits immediately,
+bypassing extraction step 4 with ZERO locator timeout latency and returning clean BUSINESS_OUTCOME.
+
+--------------------------------------------------------------------------------
+STEP EXECUTION TRACE
+--------------------------------------------------------------------------------
+Step   | Action         | Status   | Duration (ms)  | Target / Resolved Locator
+-------------------------------------------------------------------------------
+1      | navigate       | OK       |         15.18 | navigation_url
+2      | fill           | OK       |         25.85 | primary:role:textbox[name='Member Search ID']
+3      | click          | OK       |         56.17 | primary:role:button[name='Search Records']
+
+--------------------------------------------------------------------------------
+SERIALIZED EXECUTION RESULT (JSON)
+--------------------------------------------------------------------------------
+{
+  "status": "BUSINESS_OUTCOME",
+  "capability_id": "member_balance_lookup",
+  "version": "1.0.0",
+  "data": null,
+  "outcome_code": "MEMBER_NOT_FOUND",
+  "outcome_message": "Member record does not exist in core banking system",
+  "execution_time_ms": 328.97,
+  "steps_executed": 3,
+  "step_logs": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "status": "OK",
+      "duration_ms": 15.18,
+      "target_resolved": "navigation_url",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "status": "OK",
+      "duration_ms": 25.85,
+      "target_resolved": "primary:role:textbox[name='Member Search ID']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "OK",
+      "duration_ms": 56.17,
+      "target_resolved": "primary:role:button[name='Search Records']",
+      "extracted_data": null,
+      "error_message": null
+    }
+  ],
+  "interventions": [],
+  "evidence_path": null,
+  "debug_context": null
+}
+
+================================================================================
+END OF REPLAY BUSINESS OUTCOME EVIDENCE LOG
+================================================================================

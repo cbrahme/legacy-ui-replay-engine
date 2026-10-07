@@ -1,0 +1,105 @@
+================================================================================
+COMPUTER-USE AUTOMATION SYSTEM: REPLAY HARD FAILURE & DIAGNOSTIC CAPTURE EVIDENCE LOG
+================================================================================
+Capability:       Member Savings Balance Lookup (member_balance_lookup_corrupted v1.0.0)
+Status:           HARD_FAILURE
+Outcome Code:     STEP_EXECUTION_FAILED
+Outcome Message:  Step 4 failed: Failed to resolve element using any locator strategy within 1500ms.
+Execution Time:   1852.92 ms
+Steps Executed:   4 / 4
+PII Redaction:    ACTIVE (All SSNs, account numbers, and tokens redacted)
+================================================================================
+
+--------------------------------------------------------------------------------
+CONTEXT & SCENARIO DESCRIPTION
+--------------------------------------------------------------------------------
+Replay injected with corrupted extraction locator to demonstrate robust failure categorization.
+The replay engine exhausts all primary and fallback locators, transitions to HARD_FAILURE,
+and immediately invokes _capture_failure_artifacts() to persist full-page PNG screenshot
+and sanitized HTML DOM snapshot directly into evidence/.
+
+--------------------------------------------------------------------------------
+STEP EXECUTION TRACE
+--------------------------------------------------------------------------------
+Step   | Action         | Status   | Duration (ms)  | Target / Resolved Locator
+-------------------------------------------------------------------------------
+1      | navigate       | OK       |         12.94 | navigation_url
+2      | fill           | OK       |         23.92 | primary:role:textbox[name='Member Search ID']
+3      | click          | OK       |         44.19 | primary:role:button[name='Search Records']
+4      | extract        | FAILED   |       1502.18 | -
+       └── Error: Failed to resolve element using any locator strategy within 1500ms.
+
+--------------------------------------------------------------------------------
+RICH FAILURE SIGNALS & DIAGNOSTIC ARTIFACTS
+--------------------------------------------------------------------------------
+  Failure Screenshot: evidence/failure_member_balance_lookup_corrupted_step4_20261007_113227.png
+  DOM HTML Snapshot:  evidence/failure_member_balance_lookup_corrupted_step4_20261007_113227.html
+  step_id: 4
+  action: extract
+  error: Failed to resolve element using any locator strategy within 1500ms.
+  url: http://127.0.0.1:8000/members/12345
+
+--------------------------------------------------------------------------------
+SERIALIZED EXECUTION RESULT (JSON)
+--------------------------------------------------------------------------------
+{
+  "status": "HARD_FAILURE",
+  "capability_id": "member_balance_lookup_corrupted",
+  "version": "1.0.0",
+  "data": null,
+  "outcome_code": "STEP_EXECUTION_FAILED",
+  "outcome_message": "Step 4 failed: Failed to resolve element using any locator strategy within 1500ms.",
+  "execution_time_ms": 1852.92,
+  "steps_executed": 4,
+  "step_logs": [
+    {
+      "step_id": 1,
+      "action": "navigate",
+      "status": "OK",
+      "duration_ms": 12.94,
+      "target_resolved": "navigation_url",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 2,
+      "action": "fill",
+      "status": "OK",
+      "duration_ms": 23.92,
+      "target_resolved": "primary:role:textbox[name='Member Search ID']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "OK",
+      "duration_ms": 44.19,
+      "target_resolved": "primary:role:button[name='Search Records']",
+      "extracted_data": null,
+      "error_message": null
+    },
+    {
+      "step_id": 4,
+      "action": "extract",
+      "status": "FAILED",
+      "duration_ms": 1502.18,
+      "target_resolved": null,
+      "extracted_data": null,
+      "error_message": "Failed to resolve element using any locator strategy within 1500ms."
+    }
+  ],
+  "interventions": [],
+  "evidence_path": "evidence/failure_member_balance_lookup_corrupted_step4_20261007_113227.png",
+  "debug_context": {
+    "html_snapshot": "evidence/failure_member_balance_lookup_corrupted_step4_20261007_113227.html",
+    "step_id": 4,
+    "action": "extract",
+    "error": "Failed to resolve element using any locator strategy within 1500ms.",
+    "url": "http://127.0.0.1:8000/members/12345"
+  }
+}
+
+================================================================================
+END OF REPLAY HARD FAILURE & DIAGNOSTIC CAPTURE EVIDENCE LOG
+================================================================================
