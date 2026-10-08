@@ -1,7 +1,9 @@
 # Engineering Report: Computer-Use Automation System
 
 **Project:** Computer-Use Automation System for Legacy Banking Applications
-**System Repository:** `legacy-ui-replay-engine`  
+
+**System Repository:** `legacy-ui-replay-engine`
+
 **Author:** Chaitrali Brahme  
 
 ---
