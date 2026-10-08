@@ -1,9 +1,7 @@
 # Engineering Report: Computer-Use Automation System
 
-**Project:** Computer-Use Automation System for Legacy Banking Applications
-
-**System Repository:** `legacy-ui-replay-engine`
-
+**Project:** Computer-Use Automation System for Legacy Banking Applications  
+**System Repository:** `legacy-ui-replay-engine`  
 **Author:** Chaitrali Brahme  
 
 ---
@@ -11,13 +9,14 @@
 ## 1. Architecture: Key Decisions and Trade-offs
 
 ### 1.1 Core Architecture: "Record-Once, Replay-Many"
-Financial institutions rely on legacy back-office software that lack modern APIs. Driving these applications using an LLM in the loop for every production transaction is slow, expensive, non-deterministic, and vulnerable to hallucinations.
+Many banks and credit unions still run on legacy back-office software that lacks modern APIs. If we asked an LLM to look at the screen and decide what to click for every single production transaction, it would be far too slow, expensive, and unpredictable for real banking operations.
 
-This system decouples UI exploration from production execution via a two-phase architecture:
-1. **Discovery Phase (LLM-Driven Exploration with Live Interception):** An autonomous discovery agent ([`DiscoveryAgent`](src/agent/discovery.py)) takes a natural language goal, inspects interactive UI elements, reasons through workflows, and issues tool actions. The browser harness intercepts each live interaction, inspects the active DOM tree via [`DOMInspector`](src/agent/inspector.py), and programmatically derives a resilient 4-tier locator hierarchy (Accessibility Role and Name -> Text Anchor -> Scoped CSS -> Canonical XPath).
-2. **Compilation Phase:** The [`ArtifactCompiler`](src/agent/compiler.py) parameterizes dynamic literals (e.g., converting `"12345"` into `{{member_id}}` and `http://127.0.0.1:8000` into `{{base_url}}`), binds verified checkpoint conditions, and compiles the trajectory into a typed [`CapabilityArtifact`](src/models/artifact.py) JSON schema.
-3. **Deterministic Replay Phase (Zero LLM Inference):** Production invocations execute through [`ReplayExecutor`](src/engine/executor.py) using pure Playwright automation with zero model inference. Replay utilizes accessibility locators, parameter templating, a concurrent multi-condition state race, and an explicit error taxonomy.
-4. **Human Escalation Seam:** When the system encounters security barriers, unexpected account lockouts, or mutating steps, [`EscalationManager`](src/human/escalation.py) freezes the active browser session, presents diagnostic context, attaches real-time DOM observers and Playwright event listeners to record operator actions, and resumes automation on the same session.
+To solve this, I built a "record-once, replay-many" system that separates learning a workflow from running it in production:
+
+1. **Discovery Phase (LLM in the loop):** When learning a new task, an autonomous agent ([`DiscoveryAgent`](src/agent/discovery.py)) explores the live webpage to figure out how to reach the goal. As it interacts with the page, my browser harness inspects the live elements using [`DOMInspector`](src/agent/inspector.py) and automatically builds a stable, 4-tier locator hierarchy (Accessibility Role and Name -> Text Anchor -> CSS ID/Class -> XPath).
+2. **Compilation Phase:** The [`ArtifactCompiler`](src/agent/compiler.py) turns that discovery trajectory into a clean, reusable JSON artifact ([`CapabilityArtifact`](src/models/artifact.py)). It replaces hardcoded values like `"12345"` with parameters like `{{member_id}}` and records checkpoints to verify success.
+3. **Deterministic Replay Phase (Zero LLM):** When running in production, [`ReplayExecutor`](src/engine/executor.py) executes the saved JSON artifact using Playwright with zero LLM calls. It is fast, consistent, and cheap.
+4. **Human Escalation Seam:** If the automation hits an unexpected blocker (such as an account fraud lock or an irreversible action), [`EscalationManager`](src/human/escalation.py) pauses the live browser session, lets a human operator take over to resolve it, records what the human did, and resumes automation on that same session.
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -43,23 +42,23 @@ This system decouples UI exploration from production execution via a two-phase a
 
 ### 1.2 Key Architectural Decisions and Trade-offs
 
-* **Programmatic DOM Inspector vs. LLM-Generated Selectors:**
-  * *Decision:* When the LLM decides to interact with an element (e.g. clicking "Search"), the browser harness intercepts the live `ElementHandle` and computes verified locators directly against the live DOM and accessibility tree.
-  * *Trade-off:* Adds inspection logic during discovery, but completely eliminates fragile LLM-hallucinated CSS selectors and arbitrary XPath expressions.
+* **Automatic DOM Inspection vs. Asking the LLM for Selectors:**
+  * *My Decision:* When the LLM decides to interact with an element (for example, clicking "Search Records"), my code intercepts the live element handle and computes verified locators directly against the live DOM and accessibility tree.
+  * *Trade-off:* This adds a brief inspection step during discovery, but it completely eliminates the problem of LLMs hallucinating fragile CSS selectors or broken XPath expressions.
 
 * **Single-Process Async Runtime vs. Distributed Task Infrastructure:**
-  * *Decision:* Built as a lightweight, typed Python 3.11 async engine driven by Typer CLI and Playwright, without distributed worker queues (Celery, Kafka, Redis).
-  * *Trade-off:* Avoids premature infrastructure complexity, ensuring full end-to-end reproducibility, zero database dependencies, and sub-second test execution.
+  * *My Decision:* I built the system as a clean Python 3.11 async engine driven by Typer CLI and Playwright, without distributed worker queues like Celery or Kafka.
+  * *Trade-off:* This avoids unnecessary infrastructure complexity, keeping the project easy to run, fully reproducible locally, and allowing the test suite to finish in seconds.
 
-* **Flat JSON Artifact Catalog vs. Database Storage:**
-  * *Decision:* Capabilities are stored as versioned JSON files in [`capabilities/`](capabilities/).
-  * *Trade-off:* Enables code reviews in Git pull requests, strict schema enforcement via Pydantic v2, and effortless tenant deployment without relational database migrations.
+* **Flat JSON Artifact Files vs. A Database:**
+  * *My Decision:* I chose to store capabilities as versioned JSON files in [`capabilities/`](capabilities/) rather than in a relational database.
+  * *Trade-off:* This lets developers review, diff, and approve workflows directly in Git pull requests, with strict validation via Pydantic v2 and zero database migration overhead.
 
 ---
 
 ## 2. Artifact Schema: Structure and Design Rationale
 
-The capability artifact contract is defined in [`src/models/artifact.py`](src/models/artifact.py) as [`CapabilityArtifact`](src/models/artifact.py). It serves as a typed, versioned, and reviewable specification of a repeatable workflow.
+I designed the capability artifact contract in [`src/models/artifact.py`](src/models/artifact.py) using Pydantic v2. It acts as a clear, typed specification for any automated task.
 
 ```json
 {
@@ -150,55 +149,56 @@ The capability artifact contract is defined in [`src/models/artifact.py`](src/mo
 }
 ```
 
-### Rationale Behind Schema Shape
-1. **Decoupled from LLM Transcripts:** Prompts, system messages, and reasoning traces are discarded upon compilation. The resulting schema is an autonomous execution spec.
-2. **Multi-Tier Locator Strategies:** The `target` object encapsulates a hierarchy:
-   * *Tier 1 (Accessible Role/Name):* `role:textbox[name='Member Search ID']` is resilient to stylesheet and markup refactors.
-   * *Tier 2 (Text/Label Anchors):* Anchors elements by visible human text.
-   * *Tier 3 (Scoped CSS):* Element IDs and form-scoped classes.
+### Why I Shaped the Schema This Way
+1. **Completely Separated from LLM Transcripts:** Once discovery is complete, I discard the conversational prompt history and model tokens. The artifact only keeps the clean steps, inputs, and outputs needed to execute the workflow.
+2. **Multi-Tier Locator Fallbacks:** Web pages change slightly over time. For each target element, I store:
+   * *Tier 1 (Accessible Role and Name):* e.g. `role:textbox[name='Member Search ID']`. This is the most resilient because accessibility names rarely change even when page styling changes.
+   * *Tier 2 (Text Anchors):* Visible button or label text.
+   * *Tier 3 (Scoped CSS):* Element IDs and form classes.
    * *Tier 4 (Structural XPath):* Fallback tree navigation.
-   * *Frame Scoping:* `frame_selector` attribute isolates resolution within nested `<iframe>` hierarchies.
-3. **Parameter Injection:** The `{{base_url}}` parameter prevents hardcoding environments, enabling deployment across staging, testing, and production hosts.
-4. **Explicit Terminal Checkpoints:** Separates action submission from state verification, guaranteeing that data extraction only occurs on confirmed screens.
+   * *Frame Scoping:* A `frame_selector` field so the engine can locate elements inside legacy `<iframe>` or `<frame>` structures.
+3. **Reusable Parameters:** Using `{{base_url}}` and `{{member_id}}` ensures that the same artifact can run across local, staging, and production environments without modifying the recorded steps.
+4. **Explicit Checkpoints:** I separated form submission from data extraction so the engine only reads values after verifying that the expected page actually loaded.
 
 ---
 
 ## 3. Determinism & Error Handling: Runtime Reliability and Edge Cases
 
 ### 3.1 Eliminating Flakiness in Replay
-Deterministic replay executes without model inference. Determinism is enforced through:
-* **Playwright Auto-Waiting:** Built-in assertions for actionability (visible, attached, stable bounding box, enabled) before dispatching clicks or fills.
-* **Deterministic Fallback Cascading:** If a primary locator fails to resolve within its timeout budget, the engine automatically attempts fallback locators in priority order before reporting an error.
-* **Bounded Timeout Budgets:** Steps specify individual timeout limits (typically 5,000ms), preventing runaway execution threads.
+In production replay, there are zero LLM calls. I ensure reliability through:
+* **Playwright Auto-Waiting:** Playwright automatically waits for elements to be visible, attached to the DOM, and enabled before clicking or typing.
+* **Prioritized Fallback Cascading:** If a primary locator fails to resolve within its timeout budget, the engine automatically tries the fallback locators in order.
+* **Bounded Timeout Budgets:** Each step specifies a timeout (typically 5,000ms), so an issue fails cleanly instead of hanging the process indefinitely.
 
-### 3.2 Pre-Extraction Multi-Condition State Observer
-A common failure in legacy web automation occurs when an application branches into an error or warning screen after form submission. If an automation engine blindly executes an extraction step (e.g. querying `#savings-balance-val`), it will wait for the locator to time out before reporting an error.
+### 3.2 Pre-Extraction Multi-Condition State Race (Handling Branching and Errors)
+A common problem in legacy banking portals is that submitting a form might take you to an error message or warning banner instead of the success screen (for example, searching for a member that does not exist).
+If an automation engine blindly tries to extract the savings balance on an error screen, it would wait for 5 seconds until the locator times out, and then report a confusing failure.
 
-To solve this, the engine executes a concurrent state race prior to extraction:
-1. Concurrently evaluates `checkpoint.success_condition` against all declared `checkpoint.business_outcomes`.
-2. If a business outcome matches (e.g., `#not-found-alert` displaying "Member record not found"), execution short-circuits immediately in ~300ms, bypassing extraction steps.
-3. If an escalation trigger matches (e.g., `#account-locked-alert`), the session routes to the human operator seam.
-4. If the success condition resolves, execution proceeds to extraction.
+To fix this, I made the engine run a concurrent state race right before extraction:
+1. The engine checks for both the success checkpoint and known business outcomes at the same time.
+2. If it detects a warning banner (like `#not-found-alert` saying "Member record not found in system"), execution stops immediately in about 300ms, returning `BUSINESS_OUTCOME`. It skips the extraction step entirely with zero delay.
+3. If it detects a security alert (like `#account-locked-alert`), the session routes to the human operator seam.
+4. Only when the success condition resolves does the engine proceed to extract the account balance.
 
 ### 3.3 Four-Tier Result Taxonomy
-Execution outcomes are strictly categorized in [`src/models/result.py`](src/models/result.py):
-1. **`SUCCESS`:** Target state reached, checkpoints passed, output fields extracted.
-2. **`BUSINESS_OUTCOME`:** Expected domain outcomes (e.g. `MEMBER_NOT_FOUND`). This represents valid institutional data, not an automation error.
-3. **`RECOVERABLE_ERROR`:** Transient latency, modal dismissals, or retryable network hiccups.
-4. **`HARD_FAILURE`:** Exhausted locators, invariant breaches, or security halts.
+I categorized execution outcomes into four clear statuses in [`src/models/result.py`](src/models/result.py):
+1. **`SUCCESS`:** The flow reached the target screen, verified checkpoints, and extracted all declared data fields.
+2. **`BUSINESS_OUTCOME`:** An expected banking outcome occurred (such as "Member Not Found"). This is valid business information for the caller, not a crash or automation bug.
+3. **`RECOVERABLE_ERROR`:** Temporary issues that were resolved, such as dismissing an unexpected modal or retrying a slow page.
+4. **`HARD_FAILURE`:** Exhausted locators, invariant failures, or security policy violations.
 
-### 3.4 Automated Rich Failure Signal Generation
-When an unhandled `HARD_FAILURE` occurs, [`_capture_failure_artifacts()`](src/engine/executor.py) triggers automatically:
-* Captures a full-page PNG screenshot to `evidence/failure_*.png`.
+### 3.4 Automatic Diagnostic Capture on Failure
+Whenever an unhandled `HARD_FAILURE` occurs, my code automatically triggers [`_capture_failure_artifacts()`](src/engine/executor.py):
+* Takes a full-page PNG screenshot and saves it to `evidence/failure_*.png`.
 * Serializes and PII-sanitizes the full DOM HTML snapshot to `evidence/failure_*.html`.
-* Attaches diagnostic artifact paths and locator resolution logs to [`ExecutionResult.debug_context`](src/models/result.py).
+* Attaches these file paths and diagnostic details to [`ExecutionResult.debug_context`](src/models/result.py) so developers can debug quickly.
 
 ---
 
 ## 4. Heterogeneity & Multi-Tenant: Generalization and Scale
 
-### 4.1 Surface Abstraction Layer
-Legacy banking surfaces span modern single-page applications, server-rendered portals with framesets, and native Windows desktop apps. To decouple flow logic from surface rendering, the architecture defines a common `SurfaceAdapter` protocol:
+### 4.1 Supporting Different Surfaces
+Legacy banking software spans modern web portals, server-rendered pages with framesets, and desktop Windows apps. To decouple flow logic from how a specific screen renders, I designed a common `SurfaceAdapter` protocol:
 
 ```python
 class SurfaceAdapter(Protocol):
@@ -210,15 +210,16 @@ class SurfaceAdapter(Protocol):
     async def get_state_snapshot(self) -> Dict[str, Any]: ...
 ```
 
-* **Web Adapter (`PlaywrightAdapter`):** Implemented using Playwright's DOM and Accessibility Tree APIs.
-* **Legacy Frameset Adapter (`LegacyWebAdapter`):** Extends the web adapter by scoping actions using `LocatorStrategy.frame_selector` via `page.frame_locator(...)`, isolating nested frames.
-* **Desktop OS Adapter (`DesktopOSAdapter` - Architecture Design):** Maps `Step` actions to native OS accessibility APIs (UI Automation on Windows via `pywinauto`, macOS Accessibility via `AXUIElement`). Control targets resolve via `Name`, `AutomationId`, or OCR coordinate anchors, leaving flow orchestration unchanged.
+* **Web Adapter (`PlaywrightAdapter`):** Drives modern web applications using Playwright's DOM and Accessibility Tree APIs.
+* **Legacy Frameset Adapter (`LegacyWebAdapter`):** Handles older applications with nested `<iframe>` and `<frame>` structures by scoping actions using `LocatorStrategy.frame_selector` via `page.frame_locator(...)`.
+* **Desktop OS Adapter (`DesktopOSAdapter` - Architecture Design):** Maps the exact same `Step` actions to native OS accessibility APIs (such as Windows UI Automation via `pywinauto` or macOS Accessibility via `AXUIElement`). Control targets resolve via `Name`, `AutomationId`, or OCR coordinates, while the overall workflow remains identical.
 
-### 4.2 Multi-Tenant Generalization and Tenant Overlays
-In enterprise banking, hundreds of credit unions run identical vendor core platforms (e.g. FIS, Fiserv, Jack Henry) customized with institution-specific branding, routing prefixes, and field labels. Rather than re-recording capabilities for every tenant, the architecture uses a Base Artifact plus Tenant Overlay pattern:
+### 4.2 Reusing Artifacts Across Multiple Tenants (Banks)
+In banking, hundreds of credit unions use the same core vendor software (like FIS, Fiserv, or Jack Henry), but each institution has its own branding, URL prefix, or slightly altered fields.
+Re-recording the same workflow from scratch for every bank would be wasteful. Instead, I designed a Base Artifact plus Tenant Overlay approach:
 
-1. **Canonical Base Artifact:** Defines the vendor core workflow with parameterized paths and generic selectors.
-2. **Sparse Tenant Overlay:** A configuration file overriding institution-specific parameters:
+1. **Canonical Base Artifact:** Defines the vendor core workflow with parameterized paths and standard locators.
+2. **Sparse Tenant Overlay:** A configuration file overriding only what is unique to that institution:
    ```json
    {
      "tenant_id": "first_federal_cu",
@@ -232,71 +233,71 @@ In enterprise banking, hundreds of credit unions run identical vendor core platf
      }
    }
    ```
-3. **Drift Detection:** If fallback locators are triggered over N consecutive runs, the engine logs a telemetry alert flagging UI drift, recommending a diff review before failure occurs.
+3. **Drift Monitoring:** If a portal update causes the engine to fall back to secondary locators multiple times in a row, the system flags that locator for review before it breaks completely.
 
 ---
 
 ## 5. Escalation & Handoff: Detection, Control Transfer, and Resumption
 
-### 5.1 Triggering Human Intervention
-Human escalation is triggered when automation cannot safely proceed:
-* Unresolved locator exhaustion after exhausting all fallbacks.
-* Detection of flagged security states (e.g., `FRAUD_HOLD` alert).
-* Execution of an irreversible step (`is_irreversible: true`) requiring human clearance.
+### 5.1 When the System Hands Off to a Human
+Automation pauses and asks for human intervention when:
+* All primary and fallback locators fail on a step.
+* A security flag or fraud lockout is detected (such as `FRAUD_HOLD`).
+* A risky or irreversible step (like transferring funds) needs explicit human sign-off.
 
-### 5.2 Control Transfer Seam
-Rather than terminating the process or spawning a new browser, [`EscalationManager`](src/human/escalation.py) preserves the live execution context:
+### 5.2 How the Live Handoff Works
+Instead of closing the browser and making the user start over, [`EscalationManager`](src/human/escalation.py) keeps the live browser window open and pauses automation:
 1. **Automation Freeze:** Execution pauses on the active Playwright page without closing browser connections.
-2. **Context Packet:** Creates an [`InterventionRequest`](src/models/human.py) with request ID, trigger step, reason, current URL, and an initial screenshot saved to `evidence/escalation_before_*.png`.
-3. **Live Action Recording:** Injects a lightweight DOM observer script (`TRACKER_JS`) via `page.expose_binding('__recordHumanAction')` and attaches Playwright lifecycle listeners (`framenavigated`, `dialog`).
-4. **Operator Interaction:** The supervisor interacts with the page (e.g., clicking "Authorize Supervisor Override" or entering authorization credentials). Clicks, inputs, dialogs, and navigations are captured in real time.
-5. **PII Sanitization:** All operator inputs pass through [`PIIRedactor`](src/guardrails/redactor.py), redacting SSNs, account numbers, and tokens.
-6. **Resumption:** The operator signals completion via CLI prompt (`[R] Resume`, `[A] Abort`, `[M] Mark Step Complete`). The engine detaches listeners, captures a post-intervention screenshot (`evidence/escalation_after_*.png`), verifies state clearance, and seamlessly resumes automated execution.
+2. **Context Packet:** It creates an [`InterventionRequest`](src/models/human.py) with the reason, current URL, and an initial screenshot saved to `evidence/escalation_before_*.png`.
+3. **Live Action Recording:** I injected a lightweight DOM observer script (`TRACKER_JS`) into the page and attached Playwright event handlers (`dialog`, `framenavigated`).
+4. **Human Takes Control:** When the human operator clicks on the page (for example, clicking "Authorize Supervisor Override") or types in credentials, the engine records those actions in real time.
+5. **PII Masking:** Any text the operator types is automatically filtered through [`PIIRedactor`](src/guardrails/redactor.py) so no sensitive data is saved.
+6. **Clean Resumption:** When the operator finishes and confirms in the CLI (`[R] Resume`), the engine takes an after-screenshot (`evidence/escalation_after_*.png`), verifies that the lockout was cleared, detaches the listeners, and continues the automated run on that same page.
 
 ---
 
 ## 6. Safety: Guardrail Model, Action Gating, and Limitations
 
 ### 6.1 Safety Guardrails
-The safety layer in [`src/guardrails/`](src/guardrails/) enforces institutional security policies across both discovery and replay:
+I built guardrails in [`src/guardrails/`](src/guardrails/) to keep the agent safe and compliant with banking regulations:
 
-1. **Strict URL / Domain Allowlist:**
-   * [`GuardrailPolicy.validate_url()`](src/guardrails/policy.py) parses destination targets against approved origins (`127.0.0.1`, `localhost`, tenant domains).
-   * Prevents open-redirect attacks and out-of-scope navigation.
+1. **Strict URL Allowlist:**
+   * [`GuardrailPolicy.validate_url()`](src/guardrails/policy.py) checks every destination link against approved domains (`127.0.0.1`, `localhost`, or approved bank domains).
+   * This blocks open-redirect attacks and prevents the browser from navigating to unauthorized external websites.
 2. **Action Allowlist:**
-   * [`GuardrailPolicy.validate_action()`](src/guardrails/policy.py) restricts executable actions to verified primitives (`NAVIGATE`, `CLICK`, `FILL`, `EXTRACT`, `ASSERT`, `WAIT`).
+   * [`GuardrailPolicy.validate_action()`](src/guardrails/policy.py) restricts executable actions to verified safe primitives (`NAVIGATE`, `CLICK`, `FILL`, `EXTRACT`, `ASSERT`, `WAIT`).
    * Arbitrary script evaluation (`evaluate`, `eval`) is strictly prohibited during replay.
 3. **Irreversible Action Policy Gate:**
-   * Steps marked `is_irreversible: true` (e.g. fund disbursements, account closures) cannot execute unattended.
-   * Under headless execution without the `--allow-irreversible` flag, the engine halts prior to dispatching the action, saves pre-execution diagnostic state, and returns `HARD_FAILURE` (`IRREVERSIBLE_ACTION_BLOCKED`).
-   * In headed or interactive mode, execution routes to [`EscalationManager`](src/human/escalation.py) for supervisor approval.
+   * Steps that modify financial state (like transferring money or closing an account) are flagged with `is_irreversible: true`.
+   * In unattended headless runs, the engine stops before taking the action and returns `HARD_FAILURE` (`IRREVERSIBLE_ACTION_BLOCKED`) unless the `--allow-irreversible` flag is explicitly passed.
+   * In interactive runs, it routes to [`EscalationManager`](src/human/escalation.py) for supervisor approval.
 
-### 6.2 Regulated Data Protection (PII Scrubbing)
-Financial automation handles non-public personal information (NPI). The [`PIIRedactor`](src/guardrails/redactor.py) runs across all logging sinks, step execution traces, extracted dictionaries, and DOM dumps:
-* Redacts SSNs (`\d{3}-\d{2}-\d{4}` -> `[REDACTED_SSN]`).
-* Redacts Account Numbers (`CHK-...`, `SAV-...`, `MM-...` -> `[REDACTED_ACCOUNT]`).
-* Redacts Credit Card PANs (`\b(?:\d{4}[ -]?){3}\d{4}\b` -> `[REDACTED_CARD]`).
-* Redacts Bearer tokens and API secrets.
+### 6.2 Protecting Regulated Financial Data (PII Scrubbing)
+Bank data contains personal customer information that must never be leaked into logs or GitHub. My [`PIIRedactor`](src/guardrails/redactor.py) automatically cleans all text logs, extracted data, operator inputs, and HTML dumps:
+* Social Security Numbers (`\d{3}-\d{2}-\d{4}` -> `[REDACTED_SSN]`).
+* Bank Account Numbers (`CHK-...`, `SAV-...`, `MM-...` -> `[REDACTED_ACCOUNT]`).
+* Credit Card Numbers (`\b(?:\d{4}[ -]?){3}\d{4}\b` -> `[REDACTED_CARD]`).
+* Bearer tokens, secrets, and API keys.
 
 ### 6.3 Security Boundaries and Limitations
-* **Client-Side Redaction Scope:** Scrubbing applies to automation logs and serialized artifacts; it cannot prevent the target banking server itself from logging raw inputs.
-* **Dynamic Pattern Drift:** Regex-based PII scrubbers require configuration updates when institutional core banking systems introduce novel account number formats.
+* **Client-Side Scope:** My redactor cleans data before writing to local logs, artifacts, and traces. It cannot control what the target bank's own web server records in its server logs.
+* **Custom Account Formats:** The regex patterns cover standard US banking identifiers, but new or non-standard account formats require updating the redaction pattern list.
 
 ---
 
 ## 7. Cuts: Scoping Decisions and Future Roadmap
 
-### 7.1 What Was Deliberately Left Out (and Rationale)
-* **Real-Time WebRTC Co-Browsing GUI Console:**
-  * *Rationale:* I prioritized the core control-transfer seam: live session freezing, DOM action observation hooks, PII redaction, and CLI handoff.
+### 7.1 What I Deliberately Left Out (and Why)
+* **Real-Time WebRTC Video Streaming Console:**
+  * *Rationale:* Building an enterprise multi-user video-streaming co-browsing console is out of scope per Section 3.6 of the brief. I prioritized making the actual handoff seam solid: pausing the live browser, injecting event listeners to record what the human clicks and types, and resuming cleanly.
 * **Native Desktop OS Automation Engine:**
   * *Rationale:* Real enterprise back-office surfaces include Windows Thick Clients. While I designed the `SurfaceAdapter` architecture and `frame_selector` contract, building full Windows UI Automation drivers was cut in favor of deep web reliability.
 * **Distributed Task Queue Infrastructure (Celery, RabbitMQ, Kafka):**
-  * *Rationale:* Enterprise architectures require distributed execution pools, but introducing Redis/Celery plumbing locally adds operational friction without improving the core automation primitives.
+  * *Rationale:* In production at scale, you would run jobs through message queues. For this project, adding Docker containers and brokers would add setup friction without improving the core automation primitives.
 * **Unbounded Open-Ended LLM Self-Healing on Replay:**
   * *Rationale:* Allowing an LLM to take over when replay fails introduces non-determinism, hallucinations, and unbudgeted latency into production. Replay strictly favors deterministic fallbacks and clean human escalation.
 
-### 7.2 What to Build Next
-1. **Agent-Facing Callable Capability Catalog:** Expose saved artifacts as callable tools (OpenAI Function Calling schema or MCP tool definitions) that master agents can discover and invoke on demand.
-2. **Automated Bounded Drift Recovery:** If a primary locator fails repeatedly over multiple runs, trigger a bounded, single-step LLM discovery session to refresh the artifact locators via Git PR, without altering production flow.
-3. **Visual Regression and OCR Anchoring:** Add perceptual layout diffing to detect visual displacement in legacy software lacking reliable accessibility labels.
+### 7.2 What I Would Build Next
+1. **Agent-Facing Callable Capability Catalog:** Expose saved capability artifacts as callable functions (like OpenAI tool definitions or MCP tools) so higher-level AI agents can discover and trigger them on demand.
+2. **Automated Bounded Drift Recovery:** If a step consistently relies on fallback locators over several runs, trigger a bounded, single-step LLM discovery run in the background to update the primary locator via a Git pull request.
+3. **Perceptual Layout Diffing:** Add screenshot comparison for legacy applications where accessibility tags are completely missing and elements can only be recognized visually.
