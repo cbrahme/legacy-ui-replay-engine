@@ -3,7 +3,7 @@
 **Project:** Computer-Use Automation System for Legacy Banking Applications  
 **Company:** interface.ai Engineering Take-Home  
 **System Repository:** `legacy-ui-replay-engine`  
-**Author:** Engineering Team  
+**Author:** Chaitrali Brahme  
 
 ---
 
