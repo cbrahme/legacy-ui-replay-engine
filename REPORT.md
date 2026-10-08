@@ -1,7 +1,6 @@
 # Engineering Report: Computer-Use Automation System
 
-**Project:** Computer-Use Automation System for Legacy Banking Applications  
-**Company:** interface.ai Engineering Take-Home  
+**Project:** Computer-Use Automation System for Legacy Banking Applications
 **System Repository:** `legacy-ui-replay-engine`  
 **Author:** Chaitrali Brahme  
 
@@ -10,7 +9,7 @@
 ## 1. Architecture: Key Decisions and Trade-offs
 
 ### 1.1 Core Architecture: "Record-Once, Replay-Many"
-Financial institutions rely on legacy back-office software (core banking platforms, teller servicing portals, underwriting consoles) that lack modern APIs. Driving these applications using an LLM in the loop for every production transaction is slow, expensive, non-deterministic, and vulnerable to hallucinations.
+Financial institutions rely on legacy back-office software that lack modern APIs. Driving these applications using an LLM in the loop for every production transaction is slow, expensive, non-deterministic, and vulnerable to hallucinations.
 
 This system decouples UI exploration from production execution via a two-phase architecture:
 1. **Discovery Phase (LLM-Driven Exploration with Live Interception):** An autonomous discovery agent ([`DiscoveryAgent`](src/agent/discovery.py)) takes a natural language goal, inspects interactive UI elements, reasons through workflows, and issues tool actions. The browser harness intercepts each live interaction, inspects the active DOM tree via [`DOMInspector`](src/agent/inspector.py), and programmatically derives a resilient 4-tier locator hierarchy (Accessibility Role and Name -> Text Anchor -> Scoped CSS -> Canonical XPath).
@@ -287,9 +286,9 @@ Financial automation handles non-public personal information (NPI). The [`PIIRed
 
 ### 7.1 What Was Deliberately Left Out (and Rationale)
 * **Real-Time WebRTC Co-Browsing GUI Console:**
-  * *Rationale:* Building an enterprise multi-user video-streaming co-browsing console is out of scope per Section 3.6. We prioritized the core control-transfer seam: live session freezing, DOM action observation hooks, PII redaction, and CLI handoff.
+  * *Rationale:* I prioritized the core control-transfer seam: live session freezing, DOM action observation hooks, PII redaction, and CLI handoff.
 * **Native Desktop OS Automation Engine:**
-  * *Rationale:* Real enterprise back-office surfaces include Windows Thick Clients. While we designed the `SurfaceAdapter` architecture and `frame_selector` contract, building full Windows UI Automation drivers was cut in favor of deep web reliability.
+  * *Rationale:* Real enterprise back-office surfaces include Windows Thick Clients. While I designed the `SurfaceAdapter` architecture and `frame_selector` contract, building full Windows UI Automation drivers was cut in favor of deep web reliability.
 * **Distributed Task Queue Infrastructure (Celery, RabbitMQ, Kafka):**
   * *Rationale:* Enterprise architectures require distributed execution pools, but introducing Redis/Celery plumbing locally adds operational friction without improving the core automation primitives.
 * **Unbounded Open-Ended LLM Self-Healing on Replay:**
